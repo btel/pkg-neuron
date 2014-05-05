@@ -24,7 +24,7 @@ export LDFLAGS = -Wl,--as-needed
 PYVER=$(shell pyversions --default)
 
 %:
-	dh $@
+	dh $@ --with python2
 
 # Override parameters for configure
 #   --with-music necessary ATM to have CYTHON defined even for
@@ -45,11 +45,11 @@ override_dh_auto_install:
 	dh_auto_install
 	#dh_auto_install --destdir=debian/python-neuron --buildsystem=python_distutils
 	dh_auto_install --destdir=debian/python-neuron -Dsrc/nrnpython --buildsystem=python_distutils
-	install --mode=644 share/lib/python/rdxml.py debian/python-neuron/usr/lib/$(PYVER)/dist-packages
+	#install --mode=644 share/lib/python/rdxml.py debian/python-neuron/usr/lib/$(PYVER)/dist-packages
 
-override_dh_install:
-	dh_install
-	rm -rf debian/neuron-common/usr/share/nrn/lib/python
+# override_dh_install:
+#	dh_install
+	# rm -rf debian/neuron-common/usr/share/nrn/lib/python
 	# Figure out if necessary at all
 	# ln -sf /usr/share/pyshared/neuron debian/neuron-common/usr/share/nrn/lib/python/
 	# ln -sf /usr/share/pyshared/rdxml.py debian/neuron-common/usr/share/nrn/lib/python/rdxml.py
