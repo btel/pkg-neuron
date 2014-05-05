@@ -5,15 +5,15 @@ Maintainer: NeuroDebian Team <team@neuro.debian.net>
 Uploaders: Yaroslav Halchenko <debian@onerussian.com>, Michael Hanke <michael.hanke@gmail.com>
 Build-Depends: debhelper (>= 7.0.50~),
                autotools-dev, autoconf, automake, libtool,
-               libmusic-dev, music-bin,
                libopenmpi-dev,
                pvm-dev,
-               python-dev, python-support, cython,
+               python-all, cython,
                bison, flex
 Standards-Version: 3.9.1
 Homepage: http://www.neuron.yale.edu
 Vcs-Browser: http://git.debian.org/?p=pkg-exppsy/nrn.git
 Vcs-Git: git://git.debian.org/git/pkg-exppsy/nrn.git
+X-Python-Version: >= 2.5
 
 Package: neuron
 Architecture: any
