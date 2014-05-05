@@ -32,7 +32,7 @@ PYVER=$(shell pyversions --default)
 override_dh_auto_configure:
 	./build.sh
 	NSRC=$$PWD dh_auto_configure -- \
-	 --without-iv --with-nrnpython=/usr/bin/python --with-music=/usr \
+	 --without-iv --with-nrnpython=/usr/bin/python \
 	 --exec_prefix=/usr
 	cp debian/source/nrnversion.h src/nrnoc/
 
@@ -43,7 +43,7 @@ override_dh_auto_configure:
 
 override_dh_auto_install:
 	dh_auto_install
-	dh_auto_install --destdir=debian/python-neuron -Dsrc/neuronmusic --buildsystem=python_distutils
+	#dh_auto_install --destdir=debian/python-neuron --buildsystem=python_distutils
 	dh_auto_install --destdir=debian/python-neuron -Dsrc/nrnpython --buildsystem=python_distutils
 	install --mode=644 share/lib/python/rdxml.py debian/python-neuron/usr/lib/$(PYVER)/dist-packages
 
