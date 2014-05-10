@@ -39,7 +39,7 @@ override_dh_auto_configure:
 #override_dh_auto_build:
 #	dh_auto_build
 #	dh_auto_build -Dsrc/neuronmusic --buildsystem=python_distutils
-#	dh_auto_build -Dsrc/nrnpython --buildsystem=python_distutils
+	dh_auto_build -Dsrc/nrnpython --buildsystem=python_distutils
 
 override_dh_auto_install:
 	dh_auto_install

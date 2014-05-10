@@ -63,16 +63,6 @@ mswin:
 
 endif
 
-if BUILD_NRNPYTHON
-install-exec-hook:
-	echo "enter install-exec-hook in nrn/Makefile.am"
-	if test "@ac_pysetup@" != "no" ; then \
-		cd src/nrnpython ; \
-		$(PYTHON) setup.py install @ac_pysetup@ ;\
-	fi
-	echo "leave install-exec-hook in nrn/Makefile.am"
-endif
-
 ALPHADIR = hines@www.neuron.yale.edu:/home/htdocs/ftp/neuron/versions/alpha
 
 if MAKE_RPMS

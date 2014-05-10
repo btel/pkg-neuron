@@ -107,7 +107,7 @@ static void nrn_alloc(_prop)
      _nrn_setdata_reg(_mechtype, _setdata);
   hoc_register_dparam_size(_mechtype, 0);
  	hoc_register_var(hoc_scdoub, hoc_vdoub, hoc_intfunc);
- 	ivoc_help("help ?1 Xmech /home/hines/neuron/nrnrelrpm/src/nrnoc//home/hines/neuron/nrn/src/nrnoc/xmech.mod\n");
+ 	ivoc_help("help ?1 Xmech /vagrant/debian-pkg/nrn-7.3/src/nrnoc/./xmech.mod\n");
  hoc_register_limits(_mechtype, _hoc_parm_limits);
  hoc_register_units(_mechtype, _hoc_parm_units);
  }

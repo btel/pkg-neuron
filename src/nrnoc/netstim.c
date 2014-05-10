@@ -195,7 +195,7 @@ static void nrn_alloc(_prop)
  pnt_receive[_mechtype] = _net_receive;
  pnt_receive_size[_mechtype] = 1;
  	hoc_register_var(hoc_scdoub, hoc_vdoub, hoc_intfunc);
- 	ivoc_help("help ?1 NetStim /home/hines/neuron/nrnrelrpm/src/nrnoc//home/hines/neuron/nrn/src/nrnoc/netstim.mod\n");
+ 	ivoc_help("help ?1 NetStim /vagrant/debian-pkg/nrn-7.3/src/nrnoc/./netstim.mod\n");
  hoc_register_limits(_mechtype, _hoc_parm_limits);
  hoc_register_units(_mechtype, _hoc_parm_units);
  }

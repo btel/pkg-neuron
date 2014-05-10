@@ -558,13 +558,7 @@ AC_CONFIG_FILES([
 	src/nrnjava/Makefile src/nrnjava/nrnccmb/Makefile
 	src/nrnjava/neuron/Makefile
 	src/nrnpython/Makefile src/ni_pci_6229/Makefile
-	src/mac/Makefile src/mswin/Makefile src/mswin/batch/Makefile
-	src/mswin/nrnsetup.nsi src/mswin/nrncygso.sh src/mswin/lib/mknrndll.mak
-	src/mswin/nrnsetupmingw.nsi
-	src/mswin/extra/Makefile src/mswin/rdln/Makefile
-	src/mswin/windll/Makefile
-	src/mswin/wnrnbbs/Makefile src/mswin/lib/Makefile
-	src/mswin/bin/Makefile src/neuronmusic/Makefile src/neuronmusic/setup.py
+	src/neuronmusic/Makefile src/neuronmusic/setup.py
 	share/Makefile bin/nrnoc_makefile bin/nrniv_makefile bin/nrnmech_makefile
 	share/lib/Makefile share/lib/hoc/Makefile share/lib/python/Makefile
 	share/lib/hoc/celbild/Makefile share/lib/hoc/mulfit/Makefile

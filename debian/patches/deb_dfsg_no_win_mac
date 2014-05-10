@@ -1,11 +1,12 @@
 --- a/configure.in
 +++ b/configure.in
-@@ -513,12 +513,7 @@ AC_CONFIG_FILES([
+@@ -558,13 +558,7 @@
  	src/nrnjava/Makefile src/nrnjava/nrnccmb/Makefile
  	src/nrnjava/neuron/Makefile
  	src/nrnpython/Makefile src/ni_pci_6229/Makefile
 -	src/mac/Makefile src/mswin/Makefile src/mswin/batch/Makefile
 -	src/mswin/nrnsetup.nsi src/mswin/nrncygso.sh src/mswin/lib/mknrndll.mak
+-	src/mswin/nrnsetupmingw.nsi
 -	src/mswin/extra/Makefile src/mswin/rdln/Makefile
 -	src/mswin/windll/Makefile
 -	src/mswin/wnrnbbs/Makefile src/mswin/lib/Makefile
@@ -16,19 +17,13 @@
  	share/lib/hoc/celbild/Makefile share/lib/hoc/mulfit/Makefile
 --- a/src/Makefile.am
 +++ b/src/Makefile.am
-@@ -96,13 +96,12 @@ SUBDIRS = $(nmodlbuild)
+@@ -87,8 +87,7 @@
  else
  SUBDIRS = $(readlinebuild) $(memacsbuild) $(nmodlbuild) $(NRNOC_SUBDIRS) \
- 	$(nrnjavabuild) $(ivosbuild) $(nrnpythonbuild) $(nrnpydynam) \
+ 	$(nrnjavabuild) $(ivosbuild) $(nrnpythonbuild) \
 -	$(build_6229) $(nrnivbuild) $(mos2nrnbuild) $(neuronmusicbuild) \
 -	mac mswin
 +	$(build_6229) $(nrnivbuild) $(mos2nrnbuild) $(neuronmusicbuild)
  endif
  
  DIST_SUBDIRS = $(MEMACS_SUBDIRS) $(READLINE_SUBDIRS) $(NMODL_SUBDIRS) $(NRNOC_SUBDIRS) \
- 	$(NRNJAVA_SUBDIRS) $(NRNIV_SUBDIRS) $(IVOS_SUBDIRS) \
--	$(NRNPYTHON_SUBDIRS) mswin uxnrnbbs mac ni_pci_6229 neuronmusic
-+	$(NRNPYTHON_SUBDIRS) uxnrnbbs ni_pci_6229 neuronmusic
- 
- dist-hook: $(npydir)
- 	for subdir in $(npydir) ; do \

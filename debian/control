@@ -7,13 +7,13 @@ Build-Depends: debhelper (>= 7.0.50~),
                autotools-dev, autoconf, automake, libtool,
                libopenmpi-dev,
                pvm-dev,
-               python-all, cython, python-dev
+               python-all, cython, python-all-dev,
                bison, flex
 Standards-Version: 3.9.1
 Homepage: http://www.neuron.yale.edu
 Vcs-Browser: http://git.debian.org/?p=pkg-exppsy/nrn.git
 Vcs-Git: git://git.debian.org/git/pkg-exppsy/nrn.git
-X-Python-Version: >= 2.5
+X-Python-Version: >= 2.7
 
 Package: neuron
 Architecture: any

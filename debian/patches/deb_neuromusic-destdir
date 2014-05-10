@@ -1,6 +1,6 @@
 --- a/src/neuronmusic/Makefile.am
 +++ b/src/neuronmusic/Makefile.am
-@@ -15,7 +15,7 @@ install-exec-am: neuronmusic.cpp
+@@ -15,7 +15,7 @@
  	if test ! -f neuronmusic.cpp ; then \
  		cp $(nmsrc)/neuronmusic.cpp  . ; \
  	fi
