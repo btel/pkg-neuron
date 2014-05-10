@@ -33,6 +33,7 @@ class NetConSaveIndexTable;
 class PreSynSaveIndexTable;
 class IvocVect;
 class BGP_DMASend;
+class BGP_DMASend_Phase2;
 
 #define DiscreteEventType 0
 #define TstopEventType 1
@@ -101,7 +102,7 @@ public:
 	double* weight_;
 	Object* obj_;
 	int cnt_;
-	boolean active_;
+	bool active_;
 
 	static unsigned long netcon_send_active_;
 	static unsigned long netcon_send_inactive_;
@@ -171,7 +172,7 @@ public:
 	double valold_, told_;
 	double valthresh_; // go below this to reset threshold detector.
 	TQItem* qthresh_;
-	boolean flag_; // true when below, false when above.
+	bool flag_; // true when below, false when above.
 
 	static unsigned long init_above_;
 	static unsigned long send_qthresh_;
@@ -228,6 +229,7 @@ public:
 	void disconnect(Observable*);
 	void update_ptr(double*);
 	void record_stmt(const char*);
+	void record_stmt(Object*);
 	void record(IvocVect*, IvocVect* idvec = nil, int rec_id = 0);
 	void record(double t);
 	void init();
@@ -260,6 +262,7 @@ public:
 	union { // A PreSyn cannot be both a source spike generator
 		// and a receiver of off-host spikes.
 		BGP_DMASend* dma_send_;
+		BGP_DMASend_Phase2* dma_send_phase2_;
 		int srchost_;
 	} bgp;
 #endif
@@ -277,7 +280,7 @@ public:
 	virtual void savestate_restore(double deliverytime, NetCvode*);
 	virtual void savestate_write(FILE*);
 	PreSyn* presyn_;	
-	boolean have_qthresh_;
+	bool have_qthresh_;
 
 	static void invalid();
 	static PreSyn* hindx2presyn(long);

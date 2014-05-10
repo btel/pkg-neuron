@@ -1,6 +1,7 @@
 #include <../../nrnconf.h>
 #include <stdio.h>
 #include <InterViews/observe.h>
+#include "ocnotify.h"
 #if HAVE_IV
 #include "ivoc.h"
 #endif
@@ -29,7 +30,7 @@ public:
 	virtual void update(Observable*);
 	void create();
 	void lmfree();
-	boolean valid() { return model_ != nil; }
+	bool valid() { return model_ != nil; }
 	void update_ptrs();
 
 	LinearModelAddition* model_;
@@ -39,6 +40,7 @@ public:
 	Vect* y0_;
 	Vect* b_;
 	int nnode_;
+	Object* f_callable_;
 	Node** nodes_;
 	Vect* elayer_;
 };
@@ -76,7 +78,7 @@ void LinearMechanism_reg() {
 LinearMechanism::LinearMechanism() {
 	model_ = nil;
 	c_ = nil; g_ = nil; y_ = nil; b_ = nil; nnode_ = 0; nodes_ = nil;
-	y0_ = nil; elayer_ = nil;
+	y0_ = nil; elayer_ = nil; f_callable_ = nil;
 }
 
 LinearMechanism::~LinearMechanism() {
@@ -85,15 +87,16 @@ LinearMechanism::~LinearMechanism() {
 }
 
 void LinearMechanism::lmfree() {
+    if (f_callable_) {
+        hoc_obj_unref(f_callable_);
+        f_callable_ = nil;
+    }
 	if (model_) {
 		delete model_;
 		model_ = nil;
 	}
 	if (nodes_) {
-#if HAVE_IV
-		Oc oc;
-		oc.notify_pointer_disconnect(this);
-#endif
+		nrn_notify_pointer_disconnect(this);
 		nnode_ = 0;
 		delete [] nodes_;
 		nodes_ = nil;
@@ -103,16 +106,13 @@ void LinearMechanism::lmfree() {
 
 void LinearMechanism::update_ptrs() {
 	if (nodes_) {
-#if HAVE_IV
-		Oc oc;
-		oc.notify_pointer_disconnect(this);
+		nrn_notify_pointer_disconnect(this);
 		for (int i=0; i < nnode_; ++i) {
 			double* pd = nrn_recalc_ptr(&(NODEV(nodes_[i])));
 			if (pd != &(NODEV(nodes_[i]))) {
-				oc.notify_when_freed(pd, this);
+				nrn_notify_when_double_freed(pd, this);
 			}
 		}
-#endif
 	}
 }
 
@@ -125,11 +125,21 @@ void LinearMechanism::create()
 {
 	int i;
 	lmfree();
-	c_ = matrix_arg(1);
-	g_ = matrix_arg(2);
-	y_ = vector_arg(3);
-	i = 3;
-	if (ifarg(5) && hoc_is_object_arg(5) && is_vector_arg(5)) {
+	i = 0;
+	Object* o = *hoc_objgetarg(++i);
+	
+	if (strcmp(o->ctemplate->sym->name, "PythonObject") == 0) {
+	    f_callable_ = o;
+    	hoc_obj_ref(o);
+	    c_ = matrix_arg(++i);
+    } else {
+        f_callable_ = NULL;
+        c_ = matrix_arg(1);
+    }
+	g_ = matrix_arg(++i);
+	y_ = vector_arg(++i);
+
+	if (ifarg(i + 2) && hoc_is_object_arg(i + 2) && is_vector_arg(i + 2)) {
 		y0_ = vector_arg(++i);
 	}
 	b_ = vector_arg(++i);
@@ -137,15 +147,14 @@ void LinearMechanism::create()
 #if HAVE_IV
 	Oc oc;
 #endif
+
 	if (hoc_is_double_arg(i)) {
 		nnode_ = 1;
 		nodes_ = new Node*[1];
 		double x = chkarg(i, 0., 1.);
 		Section* sec = chk_access();
 		nodes_[0] = node_exact(sec, x);
-#if HAVE_IV
-		oc.notify_when_freed(&NODEV(nodes_[0]), this);
-#endif
+		nrn_notify_when_double_freed(&NODEV(nodes_[0]), this);
 	}else{
 		Object* o = *hoc_objgetarg(i);
 		check_obj_type(o, "SectionList");
@@ -157,9 +166,7 @@ void LinearMechanism::create()
 		nodes_ = new Node*[x->capacity()];
 		for (sec = sl->begin(); sec; sec = sl->next()) {
 			nodes_[nnode_] = node_exact(sec, x->elem(nnode_));
-#if HAVE_IV
-			oc.notify_when_freed(&NODEV(nodes_[nnode_]), this);
-#endif
+			nrn_notify_when_double_freed(&NODEV(nodes_[nnode_]), this);
 			++nnode_;
 		}
 		if (ifarg(i+2)) {
@@ -168,6 +175,6 @@ void LinearMechanism::create()
 		sl->unref();
 	}
     }
-	model_ = new LinearModelAddition(c_, g_, y_, y0_, b_,
-		nnode_, nodes_, elayer_);
+ 	model_ = new LinearModelAddition(c_, g_, y_, y0_, b_,
+		nnode_, nodes_, elayer_, f_callable_);
 }

@@ -16,6 +16,7 @@
 #include "oc2iv.h"
 #include "ocpointer.h"
 #include "parse.h"
+#include "ocnotify.h"
 
 #if HAVE_IV
 #include "ivoc.h"
@@ -33,10 +34,7 @@ OcPointer::OcPointer(const char* st, double* d) : Observer() {
 	strcpy(s_, st);
 	p_ = d;
 	valid_ = true;
-#if HAVE_IV
-	Oc oc;
-	oc.notify_when_freed(p_, this);
-#endif
+	nrn_notify_when_double_freed(p_, this);
 }
 
 OcPointer::~OcPointer() {
@@ -44,10 +42,7 @@ OcPointer::~OcPointer() {
 		delete sti_;
 	}
 	delete [] s_;
-#if HAVE_IV
-	Oc oc;
-	oc.notify_pointer_disconnect(this);
-#endif
+	nrn_notify_pointer_disconnect(this);
 }
 
 void OcPointer::update(Observable*) {
@@ -146,7 +141,7 @@ void StmtInfo::parse() {
 	const char* s;
 	symlist_ = nil;
 	ParseTopLevel ptl;
-	boolean see_arg = false;
+	bool see_arg = false;
 	for (s=stmt_->string(), d = buf; *s; ++s, ++d) {
 		if (*s == '$' && s[1] == '1') {
 			strcpy(d, "hoc_ac_");

@@ -8,8 +8,12 @@
 
 READLINE_SUBDIRS = readline
 MEMACS_SUBDIRS = memacs
+if BUILD_MINGW
+NMODL_SUBDIRS = modlunit nmodl
+else
 NMODL_SUBDIRS = e_editor modlunit nmodl
-NRNOC_SUBDIRS = sparse sparse13 scopmath nrnmpi oc nrnoc
+endif
+NRNOC_SUBDIRS = sparse sparse13 scopmath Random123 nrnmpi oc nrnoc
 NRNIV_SUBDIRS = sundials mesch gnu ivoc nrncvode parallel nrniv
 IVOS_SUBDIRS = ivos
 NRNJAVA_SUBDIRS = nrnjava
@@ -53,9 +57,8 @@ endif
 
 if BUILD_NRNPYTHON
 nrnpythonbuild = $(NRNPYTHON_SUBDIRS)
-else
-nrnpythonbuild =
 endif
+
 
 if BUILD_NEURONMUSIC
 neuronmusicbuild = neuronmusic
@@ -63,26 +66,14 @@ else
 neuronmusicbuild =
 endif
 
-npydir = npy24 npy25 npy26 npy27
-
-if BUILD_NRNPYTHON_DYNAMIC
-#does not work with parallel make (-j)
-
-nrnpydynam = $(npydir)
-
-all-recursive: npy27/Makefile
-
-npy27/Makefile: nrnpython/Makefile $(srcdir)/nrnpython/nrnpydynam.sh
-	bash $(srcdir)/nrnpython/nrnpydynam.sh $(srcdir) $(DEPDIR) $(host)
-
-else
-nrnpydynam =
-endif
-
 if BUILD_CYGWIN
 mos2nrnbuild =
 else
+if BUILD_MINGW
+mos2nrnbuild =
+else
 mos2nrnbuild = uxnrnbbs
+endif
 endif
 
 if BUILD_6229
@@ -95,7 +86,7 @@ if NMODL_ONLY
 SUBDIRS = $(nmodlbuild)
 else
 SUBDIRS = $(readlinebuild) $(memacsbuild) $(nmodlbuild) $(NRNOC_SUBDIRS) \
-	$(nrnjavabuild) $(ivosbuild) $(nrnpythonbuild) $(nrnpydynam) \
+	$(nrnjavabuild) $(ivosbuild) $(nrnpythonbuild) \
 	$(build_6229) $(nrnivbuild) $(mos2nrnbuild) $(neuronmusicbuild) \
 	mac mswin
 endif
@@ -110,3 +101,15 @@ dist-hook: $(npydir)
 		|| $(mkdir_p) "$(distdir)/$$subdir" \
 		|| exit 1; \
 	done
+
+install-exec-hook:
+	echo "enter install-exec-hook in nrn/src/Makefile.am"
+if BUILD_NRNMPI_DYNAMIC
+	cd nrnmpi ; \
+	NEED_RTLD_GLOBAL='-L$(libdir) -loc -lnrniv' ; \
+	export NEED_RTLD_GLOBAL ; \
+	$(RM) *.la ; \
+	$(MAKE) -e install
+endif
+	echo "leave install-exec-hook in nrn/src/Makefile.am"
+

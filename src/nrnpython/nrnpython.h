@@ -1,6 +1,12 @@
 #ifndef nrnpython_h
 #define nrnpython_h
 
+#ifdef _WIN64
+#define MS_WIN64
+#define MS_WIN32
+#define MS_WINDOWS
+#endif
+
 #include <../../nrnconf.h>
 #include <nrnpython_config.h>
 #if defined(USE_PYTHON)
@@ -43,6 +49,12 @@ char* nrnpy_PyString_AsString(PyObject*);
 #endif
 extern PyObject* nrnpy_hoc_pop();
 extern int nrnpy_numbercheck(PyObject*);
+
+#if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ > __SIZEOF_LONG__
+#define castptr2long (long)(long long)
+#else
+#define castptr2long (long)
+#endif
 
 #if defined(__cplusplus)
 }

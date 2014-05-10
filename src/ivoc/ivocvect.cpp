@@ -103,6 +103,7 @@ extern Symlist* hoc_top_level_symlist;
 extern void nrn_exit(int);
 IvocVect* (*nrnpy_vec_from_python_p_)(void*);
 Object** (*nrnpy_vec_to_python_p_)(void*);
+Object** (*nrnpy_vec_as_numpy_helper_)(int, double*);
 };
 
 
@@ -340,7 +341,7 @@ Vect* vector_arg(int i) {
 	return (Vect*)(ob->u.this_pointer);
 }
 
-boolean is_vector_arg(int i) {
+bool is_vector_arg(int i) {
 	Object* ob = *hoc_objgetarg(i);
 	if (!ob || ob->ctemplate != svec_->u.ctemplate) {
 		return false;
@@ -354,7 +355,7 @@ int vector_arg_px(int i, double** px) {
 	return x->capacity();
 }
 
-extern void nrn_vecsim_add(void*, boolean);
+extern void nrn_vecsim_add(void*, bool);
 extern void nrn_vecsim_remove(void*);
 
 static int possible_destvec(int arg, Vect*& dest) {
@@ -1121,7 +1122,7 @@ static Object** v_sumgauss(void* v) {
 	double step = chkarg(3,1.e-99,1.e99);
 	double var = chkarg(4,0,1.e99);
         Vect* w;
-	boolean d = false;
+	bool d = false;
         if (ifarg(5)) {
 	   w = vector_arg(5);
         } else {
@@ -3524,7 +3525,7 @@ static Object** v_index(void* v)
   Vect* ans = (Vect*)v;
   ParentVect* data;
   Vect* index;
-  boolean del = false;
+  bool del = false;
 
   if (ifarg(2)) {
 	data = vector_arg(1);
@@ -3571,6 +3572,16 @@ Object** v_to_python(void* v) {
 		hoc_execerror("Python not available", 0);
 	}
 	return (*nrnpy_vec_to_python_p_)(v);
+}
+
+Object** v_as_numpy(void* v) {
+	if (!nrnpy_vec_as_numpy_helper_) {
+		hoc_execerror("Python not available", 0);
+	}
+	Vect* vec = (Vect*)v;
+	// not a copy, shares the data! So do not change the size while
+	// the python numpy array is in use.
+	return (*nrnpy_vec_as_numpy_helper_)(vec->capacity(), vec->vec());
 }
 
 
@@ -3693,6 +3704,7 @@ static Member_ret_obj_func v_retobj_members[] = {
 
 	"from_python",	v_from_python,
 	"to_python",	v_to_python,
+	"as_numpy",	v_as_numpy,
 
 	0,0
 };

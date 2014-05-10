@@ -1,16 +1,154 @@
 #include <../../nrnconf.h>
+
+#include <OS/list.h>
+#include <ocnotify.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <nrnmutdec.h>
+#include "oc2iv.h"
+
+#if USE_PTHREAD
+static MUTDEC
+#endif
+
+typedef void (*PF)(void*, int);
+declareList(FList, PF);
+implementList(FList, PF);
+
+static FList* f_list;
+
+/*static*/ class PObserver {
+public:
+	void* p;
+	Observer* observer;
+};
+
+declareList(PList, PObserver);
+implementList(PList, PObserver);
+static PList* p_list;
+static PList* pd_list;
+
+extern "C" {
+void nrn_notify_freed(PF pf) {
+	if (!f_list) {
+		f_list = new FList;
+	}
+	f_list->append(pf);
+//	printf("appended to f_list in ivoc.c\n");
+}
+
+void nrn_notify_when_void_freed(void* p, Observer* ob) {
+	MUTLOCK
+	if (!p_list) {
+		p_list = new PList(30);
+	}
+	PObserver pob;
+	pob.p = p;
+	pob.observer = ob;
+	p_list->append(pob);
+	MUTUNLOCK
+}
+
+void nrn_notify_when_double_freed(double* p, Observer* ob) {
+	MUTLOCK
+	if (!pd_list) {
+		pd_list = new PList(10);
+	}
+	PObserver pob;
+	pob.p = (void*)p;
+	pob.observer = ob;
+	pd_list->append(pob);
+	MUTUNLOCK
+}
+
+void nrn_notify_pointer_disconnect(Observer* ob) {
+	PList* pl = p_list;
+	MUTLOCK
+   for(pl = p_list;;pl = pd_list) {
+	if (pl) {
+		long i, n = pl->count() - 1;
+		for (i = n; i >= 0; --i) {
+			if (pl->item(i).observer == ob) {
+				pl->remove(i);
+			}
+		}
+	}
+	if (pl == pd_list) {
+		break;
+	}
+   }
+	MUTUNLOCK
+}
+
+void notify_pointer_freed(void* pt) {
+	if (p_list) {
+		bool removed = false;
+		MUTLOCK
+		long i, n = p_list->count();
+		for (i = 0; i < n ; ++i) {
+			if (p_list->item(i).p == pt) {
+				Observer* obs = p_list->item(i).observer;
+				p_list->remove(i);
+				obs->update(nil);	// might change list
+				removed = true;
+				break;		
+			}
+		}
+		MUTUNLOCK
+		if (removed) { // maybe there is another one
+			notify_pointer_freed(pt);
+		}
+	}
+}
+void notify_freed(void* p) {
+	if (f_list) {
+		long i, n=f_list->count();
+		for (i=0; i < n; ++i) {
+			(*f_list->item(i))(p, 1);
+		}
+	}
+	notify_pointer_freed(p);	
+}
+void notify_freed_val_array(double* p, int size) {
+	if (f_list) {
+		long i, n=f_list->count();
+		for (i=0; i < n; ++i) {
+			(*f_list->item(i))((void*)p, size);
+		}
+	}
+	if (pd_list) {
+	    bool removed = true;
+	    while (removed) {
+		removed = false;
+		long i, n = pd_list->count() - 1;
+		for (i = n; i >= 0; --i) {
+			long j = (double*)pd_list->item(i).p - p;
+//printf("notify_freed_val_array %d %ld\n", size, j);
+			if (j >= 0 && j < size) {
+				Observer* obs = pd_list->item(i).observer;
+				pd_list->remove(i);
+				obs->update(nil);
+				removed = true;
+				break;
+			}
+		}
+	    }
+	}
+}
+} // end extern "C"
+
+
 #if HAVE_IV // to end of file
+
+#if defined(MINGW)
+#undef CYGWIN
+#endif
 
 #include <InterViews/event.h>
 #include <InterViews/reqerr.h>
 #include <InterViews/style.h>
-#include <OS/list.h>
 #include <IV-look/kit.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <nrnmutdec.h>
 
-#include "oc2iv.h"
 #include "ivoc.h"
 #include "xmenu.h"
 
@@ -50,9 +188,9 @@ extern "C" {
 // because NEURON can no longer maintain its own copy of dialogs.cpp
 // we communicate with the InterViews version through a callback.
 extern "C" {
-extern boolean (*IVDialog_setAcceptInput)(boolean);
-boolean setAcceptInputCallback(boolean);
-boolean setAcceptInputCallback(boolean b) {
+extern bool (*IVDialog_setAcceptInput)(bool);
+bool setAcceptInputCallback(bool);
+bool setAcceptInputCallback(bool b) {
 	Oc oc;
 	return oc.setAcceptInput(b);
 }
@@ -123,17 +261,13 @@ void winio_key_press() {
 
 #endif
 
-#if USE_PTHREAD
-static MUTDEC
-#endif
-
 Oc::Oc() {
 	MUTLOCK
 	++refcnt_;
 	MUTUNLOCK
 }
 
-boolean Oc::helpmode_;
+bool Oc::helpmode_;
 
 Oc::Oc(Session *s, char* pname, char** env) {
 	if (session_) return;
@@ -190,7 +324,7 @@ int Oc::run(int argc, char** argv) {
 	return hoc_main1(argc, argv, 0);
 }
 
-int Oc::run(const char* buf, boolean show_err_mes) {
+int Oc::run(const char* buf, bool show_err_mes) {
 	hoc_execerror_messages = show_err_mes;
 	return hoc_oc(buf);
 }
@@ -207,135 +341,26 @@ const char* Oc::name(Symbol* sym) {
 	return sym->name;
 }
 
-boolean Oc::setAcceptInput(boolean b) {
-	boolean old = handleStdin_->acceptInput_;
+bool Oc::setAcceptInput(bool b) {
+	bool old = handleStdin_->acceptInput_;
 	handleStdin_->acceptInput_ = b;
 	return old;
 }
 
-typedef void (*PF)(void*, int);
-declareList(FList, PF);
-implementList(FList, PF);
-
-static FList* f_list;
 void Oc::notify_freed(PF pf) {
-	if (!f_list) {
-		f_list = new FList;
-	}
-	f_list->append(pf);
-//	printf("appended to f_list in ivoc.c\n");
+	nrn_notify_freed(pf);
 }
 
-/*static*/ class PObserver {
-public:
-	void* p;
-	Observer* observer;
-};
-
-declareList(PList, PObserver);
-implementList(PList, PObserver);
-static PList* p_list;
-static PList* pd_list;
-
 void Oc::notify_when_freed(void* p, Observer* ob) {
-	MUTLOCK
-	if (!p_list) {
-		p_list = new PList(30);
-	}
-	PObserver pob;
-	pob.p = p;
-	pob.observer = ob;
-	p_list->append(pob);
-	MUTUNLOCK
+	nrn_notify_when_void_freed(p, ob);
 }
 
 void Oc::notify_when_freed(double* p, Observer* ob) {
-	MUTLOCK
-	if (!pd_list) {
-		pd_list = new PList(10);
-	}
-	PObserver pob;
-	pob.p = (void*)p;
-	pob.observer = ob;
-	pd_list->append(pob);
-	MUTUNLOCK
+	nrn_notify_when_double_freed(p, ob);
 }
 
 void Oc::notify_pointer_disconnect(Observer* ob) {
-	PList* pl = p_list;
-	MUTLOCK
-   for(pl = p_list;;pl = pd_list) {
-	if (pl) {
-		long i, n = pl->count() - 1;
-		for (i = n; i >= 0; --i) {
-			if (pl->item(i).observer == ob) {
-				pl->remove(i);
-			}
-		}
-	}
-	if (pl == pd_list) {
-		break;
-	}
-   }
-	MUTUNLOCK
-}
-
-extern "C" {
-void notify_pointer_freed(void* pt) {
-	if (p_list) {
-		boolean removed = false;
-		MUTLOCK
-		long i, n = p_list->count();
-		for (i = 0; i < n ; ++i) {
-			if (p_list->item(i).p == pt) {
-				Observer* obs = p_list->item(i).observer;
-				p_list->remove(i);
-				obs->update(nil);	// might change list
-				removed = true;
-				break;		
-			}
-		}
-		MUTUNLOCK
-		if (removed) { // maybe there is another one
-			notify_pointer_freed(pt);
-		}
-	}
-}
-void notify_freed(void* p) {
-	if (f_list) {
-		long i, n=f_list->count();
-		for (i=0; i < n; ++i) {
-			(*f_list->item(i))(p, 1);
-		}
-	}
-	notify_pointer_freed(p);	
-}
-void notify_freed_val_array(double* p, int size) {
-	if (f_list) {
-		long i, n=f_list->count();
-		for (i=0; i < n; ++i) {
-			(*f_list->item(i))((void*)p, size);
-		}
-	}
-	if (pd_list) {
-	    boolean removed = true;
-	    while (removed) {
-		removed = false;
-		long i, n = pd_list->count() - 1;
-		for (i = n; i >= 0; --i) {
-			long j = (double*)pd_list->item(i).p - p;
-//printf("notify_freed_val_array %d %ld\n", size, j);
-			if (j >= 0 && j < size) {
-				Observer* obs = pd_list->item(i).observer;
-				pd_list->remove(i);
-				obs->update(nil);
-				removed = true;
-				break;
-			}
-		}
-	    }
-	}
-}
+	nrn_notify_pointer_disconnect(ob);
 }
 
 HandleStdin::HandleStdin() {
@@ -396,12 +421,12 @@ void single_event_run() {
 	// actually run till no more events
 	Oc::setAcceptInput(false);
 #if MAC
-	extern boolean read_if_pending(Event&);
+	extern bool read_if_pending(Event&);
 	while ( !session->done() && read_if_pending(e)) {
 		e.handle();
 	}
 #else
-	boolean dsav = session->done();
+	bool dsav = session->done();
 	session->unquit();
 	while (session->pending() && !session->done()) {
 		session->read(e);

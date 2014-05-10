@@ -24,13 +24,13 @@ extern Point_process* ob2pntproc(Object*);
 
 //Vector.play_remove()
 void nrn_vecsim_remove(void* v) {
-	PlayRecord* pr = net_cvode_instance->playrec_uses(v);
-	if (pr) {
+	PlayRecord* pr;
+	while ((pr = net_cvode_instance->playrec_uses(v)) != 0) {
 		delete pr;
 	}
 }
 
-void nrn_vecsim_add(void* v, boolean record) {
+void nrn_vecsim_add(void* v, bool record) {
 	IvocVect* yvec, *tvec, *dvec;
 	extern short* nrn_is_artificial_;
 	double* pvar = nil;

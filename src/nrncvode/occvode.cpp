@@ -10,12 +10,12 @@
 #include "ivocvect.h"
 #include "vrecitem.h"
 #include "membfunc.h"
+#include "nonvintblock.h"
 typedef int (*Pfridot)(...);
 extern "C" {
 extern void setup_topology(), v_setup_vectors();
 extern void nrn_mul_capacity(NrnThread*, Memb_list*);
 extern void nrn_div_capacity(NrnThread*, Memb_list*);
-extern int nrnmpi_comm;
 extern int diam_changed;
 extern void recalc_diam();
 extern int nrn_errno_check(int);
@@ -27,7 +27,7 @@ extern void long_difus_solve(int, NrnThread*);
 extern Symlist *hoc_built_in_symlist;
 
 #include "spmatrix.h"
-extern void linmod_dkmap(double**, double**);
+extern void nrndae_dkmap(double**, double**);
 extern double* sp13mat;
 
 #if 1 || PARANEURON
@@ -46,8 +46,6 @@ extern void nrn_multisplit_nocap_v_part3(NrnThread*);
 extern void nrn_multisplit_adjust_rhs(NrnThread*);
 #if PARANEURON
 extern void (*nrn_multisplit_solve_)();
-extern int nrnmpi_int_sum_reduce(int in, int comm);
-extern void nrnmpi_assert_opstep(int, double, int comm);
 #endif
 };
 
@@ -85,7 +83,7 @@ The variable step method for these cases is handled by daspk.
 // determine neq_ and vector of pointers to scatter/gather y
 // as well as algebraic nodes (no_cap)
 
-boolean Cvode::init_global() {
+bool Cvode::init_global() {
 #if PARANEURON
 	if (!use_partrans_ && nrnmpi_numprocs > 1
 	    && (nrnmpi_v_transfer_ || nrn_multisplit_solve_)) {
@@ -93,7 +91,6 @@ boolean Cvode::init_global() {
 		// threads and mpi together
 		// could be a lot better.
 		use_partrans_ = true;
-		mpicomm_ = nrnmpi_comm;
 	}else
 #endif
 	if (!structure_change_) {
@@ -102,6 +99,9 @@ boolean Cvode::init_global() {
 	if (ctd_[0].cv_memb_list_ == nil) {
 		neq_ = 0;
 		if (use_daspk_) {
+			return true;
+		}
+		if (nrn_nonvint_block_ode_count(0,0)) {
 			return true;
 		}
 		return false;
@@ -147,6 +147,7 @@ void Cvode::init_eqn(){
 	// nodes with non-zero capacitance
 	zneq_cap_v = z.cmlcap_ ? z.cmlcap_->ml->nodecount : 0;
 	zneq = zneq_cap_v;
+	z.neq_v_ = z.nonvint_offset_ = zneq;
 	// now add the membrane mechanism ode's to the count
 	for (cml = z.cv_memb_list_; cml; cml = cml->next) {
 		Pfridot s = (Pfridot)memb_func[cml->index].ode_count;
@@ -154,25 +155,31 @@ void Cvode::init_eqn(){
 			zneq += cml->ml->nodecount * (*s)(cml->index);
 		}
 	}
-//printf("%d Cvode::init_eqn neq_v=%d zneq_=%d\n", nrnmpi_myid, neq_v, zneq_);
+	z.nonvint_extra_offset_ = zneq;
 	if (z.pv_) {
 		delete [] z.pv_;
 		delete [] z.pvdot_;
 		z.pv_ = 0;
 		z.pvdot_ = 0;
 	}
-	if (zneq) {
-		z.pv_ = new double*[zneq];
-		z.pvdot_ = new double*[zneq];
+	if (z.nonvint_extra_offset_) {
+		z.pv_ = new double*[z.nonvint_extra_offset_];
+		z.pvdot_ = new double*[z.nonvint_extra_offset_];
 	}
-	z.nvoffset_ = neq_;
+	zneq += nrn_nonvint_block_ode_count(zneq, _nt->id);
 	z.nvsize_ = zneq;
+	z.nvoffset_ = neq_;
 	neq_ += zneq;
+#if 0
+printf("%d Cvode::init_eqn id=%d neq_v_=%d #nonvint=%d #nonvint_extra=%d nvsize=%d\n",
+ nrnmpi_myid, _nt->id, z.neq_v_, z.nonvint_extra_offset_ - z.nonvint_offset_,
+ z.nvsize_ - z.nonvint_extra_offset_, z.nvsize_);
+#endif
 	if (nth_) { break; } //lvardt
     }
 #if PARANEURON
 	if (use_partrans_) {
-		global_neq_ = nrnmpi_int_sum_reduce(neq_, mpicomm_);
+		global_neq_ = nrnmpi_int_sum_reduce(neq_);
 //printf("%d global_neq_=%d neq=%d\n", nrnmpi_myid, global_neq_, neq_);
 	}
 #endif
@@ -259,6 +266,7 @@ void Cvode::init_eqn(){
 			}
 		}
 	}
+	nrn_nonvint_block_ode_abstol(z.nvsize_, atv, id);
     }
 	structure_change_ = false;
 }
@@ -333,35 +341,40 @@ void Cvode::daspk_init_eqn(){
 	// distinguished.
 	// note that only one thread is allowed for sparse right now.
 	NrnThread* _nt = nrn_threads;
-	CvodeThreadData&z = ctd_[0];
+	CvodeThreadData& z = ctd_[0];
 	double vtol;
 //printf("Cvode::daspk_init_eqn\n");
-	int i, j, in, ie, k, neq_v;
+	int i, j, in, ie, k, zneq;
 
 	// how many equations are there?
+	neq_ = 0;
 	Memb_func* mf;
 	CvMembList* cml;
 	//start with all the equations for the fixed step method.
 	if (use_sparse13 == 0 || diam_changed != 0) {
 		recalc_diam();
 	}
-	z.neq_v_ = spGetSize(_nt->_sp13mat, 0);
-	z.nvsize_ = z.neq_v_;
+	zneq = spGetSize(_nt->_sp13mat, 0);
+	z.neq_v_ = z.nonvint_offset_ = zneq;
 	// now add the membrane mechanism ode's to the count
 	for (cml = z.cv_memb_list_; cml; cml = cml->next) {
 		Pfridot s = (Pfridot)memb_func[cml->index].ode_count;
 		if (s) {
-			z.nvsize_ += cml->ml->nodecount * (*s)(cml->index);
+			zneq += cml->ml->nodecount * (*s)(cml->index);
 		}
 	}
+	z.nonvint_extra_offset_ = zneq;
+	zneq += nrn_nonvint_block_ode_count(zneq, _nt->id);
+	z.nvsize_ = zneq;
+	z.nvoffset_ = neq_;
 	neq_ = z.nvsize_;
 //printf("Cvode::daspk_init_eqn: neq_v_=%d neq_=%d\n", neq_v_, neq_);
 	if (z.pv_) {
 		delete [] z.pv_;
 		delete [] z.pvdot_;
 	}
-	z.pv_ = new double*[z.nvsize_];
-	z.pvdot_ = new double*[z.nvsize_];
+	z.pv_ = new double*[z.nonvint_extra_offset_];
+	z.pvdot_ = new double*[z.nonvint_extra_offset_];
 	atolvec_alloc(neq_);
 	double* atv = n_vector_data(atolnvec_, 0);
 	for (i=0; i < neq_; ++i) {
@@ -397,7 +410,7 @@ void Cvode::daspk_init_eqn(){
 				}
 			}
 		}
-		linmod_dkmap(z.pv_, z.pvdot_);
+		nrndae_dkmap(z.pv_, z.pvdot_);
 		for (i=0; i < z.neq_v_; ++i) {
 			atv[i] *= vtol;
 		}
@@ -437,10 +450,14 @@ double* Cvode::n_vector_data(N_Vector v, int tid) {
 	return N_VGetArrayPointer(v);
 }
 
+extern "C" {
+extern void nrn_extra_scatter_gather(int, int);
+}
+
 void Cvode::scatter_y(double* y, int tid){
 	int i;
 	CvodeThreadData& z = CTD(tid);
-	for (i = 0; i < z.nvsize_; ++i) {
+	for (i = 0; i < z.nonvint_extra_offset_; ++i) {
 		*(z.pv_[i]) = y[i];
 //printf("%d scatter_y %d %d %g\n", nrnmpi_myid, tid, i,  y[i]);
 	}
@@ -453,6 +470,7 @@ void Cvode::scatter_y(double* y, int tid){
 			(*s)(ml->nodecount, ml->data, ml->pdata);
 		}
 	}
+	nrn_extra_scatter_gather(0, tid);
 }
 
 static Cvode* gather_cv;
@@ -474,7 +492,8 @@ void Cvode::gather_y(N_Vector y) {
 void Cvode::gather_y(double* y, int tid) {
 	int i;
 	CvodeThreadData& z = CTD(tid);
-	for (i = 0; i < z.nvsize_; ++i) {
+	nrn_extra_scatter_gather(1, tid);
+	for (i = 0; i < z.nonvint_extra_offset_; ++i) {
 		y[i] = *(z.pv_[i]);
 //printf("gather_y %d %d %g\n", tid, i,  y[i]);
 	}
@@ -482,7 +501,7 @@ void Cvode::gather_y(double* y, int tid) {
 void Cvode::scatter_ydot(double* ydot, int tid){
 	int i;
 	CvodeThreadData& z = CTD(tid);
-	for (i = 0; i < z.nvsize_; ++i) {
+	for (i = 0; i < z.nonvint_extra_offset_; ++i) {
 		*(z.pvdot_[i]) = ydot[i];
 //printf("scatter_ydot %d %d %g\n", tid, i, ydot[i]);
 	}
@@ -505,7 +524,7 @@ void Cvode::gather_ydot(double* ydot, int tid){
 	int i;
     if (ydot){
 	CvodeThreadData& z = CTD(tid);
-	for (i = 0; i < z.nvsize_; ++i) {
+	for (i = 0; i < z.nonvint_extra_offset_; ++i) {
 		ydot[i] = *(z.pvdot_[i]);
 //printf("%d gather_ydot %d %d %g\n", nrnmpi_myid, tid, i, ydot[i]);
 	}
@@ -514,7 +533,13 @@ void Cvode::gather_ydot(double* ydot, int tid){
 
 int Cvode::setup(N_Vector ypred, N_Vector fpred){
 //printf("Cvode::setup\n");
+	if (nth_) { return 0; }
 	++jac_calls_;
+	CvodeThreadData& z = CTD(0);     
+	double gamsave = nrn_threads->_dt;
+	nrn_threads->_dt = gam();
+	nrn_nonvint_block_jacobian(z.nvsize_, n_vector_data(ypred,0), n_vector_data(fpred,0), 0);
+	nrn_threads->_dt = gamsave;
 	return 0;
 }
 
@@ -530,7 +555,7 @@ int Cvode::solvex_thread(double* b, double* y, NrnThread* nt){
 	if (z.nvsize_ == 0) { return 0; }
 	lhs(nt); // special version for cvode.
 	scatter_ydot(b, nt->id);
-	nrn_mul_capacity(nt, z.cmlcap_->ml);
+	if (z.cmlcap_) nrn_mul_capacity(nt, z.cmlcap_->ml);
 	for (i=0; i < z.no_cap_count_; ++i) {
 		NODERHS(z.no_cap_node_[i]) = 0.;
 	}
@@ -555,6 +580,7 @@ int Cvode::solvex_thread(double* b, double* y, NrnThread* nt){
 	gather_ydot(b, nt->id);
 //printf("\texit b\n");
 //for (i=0; i < neq_; ++i) { printf("\t\t%d %g\n", i, b[i]);}
+	nrn_nonvint_block_ode_solve(z.nvsize_, b, y, nt->id);
 	return 0;
 }
 	
@@ -570,7 +596,7 @@ int Cvode::solvex_thread_part1(double* b, NrnThread* nt){
 	if (z.nvsize_ == 0) { return 0; }
 	lhs(nt); // special version for cvode.
 	scatter_ydot(b, nt->id);
-	nrn_mul_capacity(nt, z.cmlcap_->ml);
+	if (z.cmlcap_) nrn_mul_capacity(nt, z.cmlcap_->ml);
 	for (i=0; i < z.no_cap_count_; ++i) {
 		NODERHS(z.no_cap_node_[i]) = 0.;
 	}
@@ -628,7 +654,9 @@ hoc_warning("errno set during ode jacobian solve", (char*)0);
 }
 
 void Cvode::fun_thread(double tt, double* y, double* ydot, NrnThread* nt){
+	CvodeThreadData& z = CTD(nt->id);
 	fun_thread_transfer_part1(tt, y, nt);
+	nrn_nonvint_block_ode_fun(z.nvsize_, y, ydot, nt->id);
 	fun_thread_transfer_part2(ydot, nt);
 }
 
@@ -640,13 +668,13 @@ void Cvode::fun_thread_transfer_part1(double tt, double* y, NrnThread* nt){
 	nt->_dt = h(); // really does not belong here but dt is needed for events
 	if (nt->_dt == 0.) { nt->_dt = 1e-8; }
 
-//printf("%lx fun %d %.15g %g\n", (long)this, neq_, _t, _dt);
+//printf("%p fun %d %.15g %g\n", this, neq_, _t, _dt);
 	play_continuous_thread(tt, nt);
 	if (z.nvsize_ == 0) { return; }
 	scatter_y(y, nt->id);
 #if PARANEURON
 	if (use_partrans_) {
-		nrnmpi_assert_opstep(opmode_, nt->_t, mpicomm_);
+		nrnmpi_assert_opstep(opmode_, nt->_t);
 	}
 #endif
 	nocap_v(nt);  // vm at nocap nodes consistent with adjacent vm
@@ -669,7 +697,7 @@ void Cvode::fun_thread_transfer_part2(double* ydot, NrnThread* nt){
 #endif
 	do_ode(nt);
 	// divide by cm and compute capacity current
-	nrn_div_capacity(nt, z.cmlcap_->ml);
+	if (z.cmlcap_) nrn_div_capacity(nt, z.cmlcap_->ml);
 	gather_ydot(ydot, nt->id);
 	before_after(z.after_solve_, nt);
 //for (int i=0; i < z.neq_; ++i) { printf("\t%d %g %g\n", i, y[i], ydot?ydot[i]:-1e99);}
@@ -683,12 +711,12 @@ void Cvode::fun_thread_ms_part1(double tt, double* y, NrnThread* nt){
 	nt->_dt = h(); // really does not belong here but dt is needed for events
 	if (nt->_dt == 0.) { nt->_dt = 1e-8; }
 
-//printf("%lx fun %d %.15g %g\n", (long)this, neq_, _t, _dt);
+//printf("%p fun %d %.15g %g\n", this, neq_, _t, _dt);
 	play_continuous_thread(tt, nt);
 	scatter_y(y, nt->id);
 #if PARANEURON
 	if (use_partrans_) {
-		nrnmpi_assert_opstep(opmode_, nt->_t, mpicomm_);
+		nrnmpi_assert_opstep(opmode_, nt->_t);
 	}
 #endif
 	nocap_v_part1(nt);  // vm at nocap nodes consistent with adjacent vm

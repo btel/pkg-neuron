@@ -11,10 +11,15 @@
 #include "parse.h"
 #include "nrnmpi.h"
 #include "nrnrt.h"
+#include "nrnfilewrap.h"
 #if defined(__GO32__)
 #include <dos.h>
 #include <go32.h>
 #endif
+
+/* only set  in ivoc */
+int nrn_global_argc;
+char** nrn_global_argv;
 
 #if defined(USE_PYTHON)
 int use_python_interpreter = 0;
@@ -22,7 +27,7 @@ void (*p_nrnpython_start)();
 #endif
 int (*p_nrnpy_pyrun)(char* fname);
 
-#if carbon
+#if carbon || defined(MINGW)
 #include <pthread.h>
 #endif
 
@@ -144,7 +149,11 @@ extern int hoc_print_first_instance;
 #define EPS hoc_epsilon
 extern double EPS;
 extern arayinstal();
-FILE	*fin;				/* input file pointer */
+/*
+used to be a FILE* but had fopen problems when 128K cores on BG/P
+tried to fopen the same file for reading at once.
+*/
+NrnFILEWrap	*fin;				/* input file pointer */
 
 #include <ctype.h>
 char	*progname;	/* for error messages */
@@ -584,8 +593,9 @@ void (*oc_jump_target_)();	/* see ivoc/SRC/ocjump.c */
 
 int yystart;
 
-execerror(s, t)	/* recover from run-time error */
+hoc_execerror_mes(s, t, prnt)	/* recover from run-time error */
 	char *s, *t;
+	int prnt;
 {
 	extern int hoc_in_yyparse;
 	hoc_in_yyparse = 0;
@@ -595,7 +605,7 @@ execerror(s, t)	/* recover from run-time error */
 #if 0
 	hoc_xmenu_cleanup();
 #endif
-	if (debug_message_ || hoc_execerror_messages) {
+	if (debug_message_ || prnt) {
 		warning(s, t);
 		frame_debug();
 #if defined(__GO32__)
@@ -619,7 +629,7 @@ execerror(s, t)	/* recover from run-time error */
 	}
 	hoc_execerror_messages = 1;
 	if (pipeflag == 0)
-		IGNORE(fseek(fin, 0L, 2));	/* flush rest of file */
+		IGNORE(nrn_fw_fseek(fin, 0L, 2));	/* flush rest of file */
 	hoc_oop_initaftererror();
 #if defined(WIN32) && !defined(CYGWIN)
 		hoc_win_normal_cursor();
@@ -628,6 +638,12 @@ execerror(s, t)	/* recover from run-time error */
 		longjmp(hoc_oc_begin, 1);
 	}
 	longjmp(begin, 1);
+}
+
+hoc_execerror(s, t)	/* recover from run-time error */
+	char *s, *t;
+{
+	hoc_execerror_mes(s, t, hoc_execerror_messages);
 }
 
 RETSIGTYPE
@@ -702,7 +718,7 @@ int nrn_istty_;
 hoc_main1_init(pname, envp)
 	char *pname, **envp;
 {
-	extern FILE	*frin;
+	extern NrnFILEWrap *frin;
 	extern FILE	*fout;
 	static int inited = 0;
 	
@@ -730,7 +746,7 @@ hoc_main1_init(pname, envp)
 	hoc_cbufstr = hocstr_create(CBUFSIZE);
 	cbuf = hoc_cbufstr->buf;
 	ctp = cbuf;
-	frin = stdin;
+	frin = nrn_fw_set_stdin();
 	fout = stdout;
 	if (!parallel_sub) {
 	    if (!nrn_is_cable()) {
@@ -765,44 +781,10 @@ HocStr* hocstr_create(size) int size; {
 	return hs;
 }
 
-static CHAR* fgets_unlimited_nltrans();
+static CHAR* fgets_unlimited_nltrans(HocStr* s, NrnFILEWrap* f, int nltrans);
 
-char* fgets_unlimited(HocStr* s, FILE* f) {
-#if 1
+char* fgets_unlimited(HocStr* s, NrnFILEWrap* f) {
 	return fgets_unlimited_nltrans(s, f, 0);
-#else
-	int c, i, n;
-	i = 0;
-	n = s->size - 1;
-	while ((c = getc(f)) != EOF) {
-#if MAC
-		if (c == '\r') {
-			c = getc(f);
-			if (c != '\n') {
-				ungetc(c, f);
-				c = '\n';
-			}
-		}
-#endif
-		s->buf[i++] = c;
-		if (i == n) {
-			n = (n+1)*2 - 1;
-/*printf("fgets_unlimited resize to %d\n", n+1);*/
-			hocstr_resize(s, n+1);
-		}
-		if (c == '\n') {
-			break;
-			s->buf[i] = '\0';
-			return s->buf;
-		}
-	}
-	if (i == 0) {
-		return (char*)0;
-	}
-	s->buf[i] = '\n';
-	s->buf[i++] = '\0';
-	return s->buf;
-#endif
 }
 
 void hocstr_delete(hs) HocStr* hs; {
@@ -955,6 +937,44 @@ printf("Discarding input til Dialog is closed.\n");
 }
 #endif
 
+#if defined(MINGW)
+static pthread_t* inputReady_;
+static pthread_mutex_t inputMutex_;
+static pthread_cond_t inputCond_;
+static int inputReadyFlag_;
+static int inputReadyVal_;
+
+void* inputReadyThread(void*  input);
+void* inputReadyThread(void* input) {
+	int i, j;
+	extern int stdin_event_ready();
+	char c;
+//	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &j);
+	for (;;) {
+		pthread_testcancel();
+#if 0
+		//if (kbhit()) {
+			if (!stdin_event_ready()) {
+				// dialog is open. cannot accept input now.
+printf("Discarding input til Dialog is closed.\n");
+				read(fileno(stdin), &c, 1);
+				continue;
+			}
+		//}
+#endif
+i = getch();
+//printf("see %d %c\n", i, i);
+		pthread_mutex_lock(&inputMutex_);
+inputReadyFlag_ = 1;
+inputReadyVal_ = i;
+		stdin_event_ready();
+		pthread_cond_wait(&inputCond_, &inputMutex_);
+		pthread_mutex_unlock(&inputMutex_);
+	}
+	printf("inputReadyThread done\n");
+}
+#endif
+
 hoc_final_exit() {
 	char buf[256];
 #if defined(USE_PYTHON)
@@ -987,7 +1007,7 @@ hoc_final_exit() {
 #else
 	sprintf(buf, "%s/lib/cleanup %d", neuron_home, hoc_pid());
 #endif
-	if (system(buf)) {;} // ignore return value
+	if (system(buf)) {;} /* ignore return value */
 #endif
 }
 	
@@ -1039,7 +1059,7 @@ moreinput()
 #else
 	if (gargc == 0) {
 #endif
-		fin = stdin;
+		fin = nrn_fw_set_stdin();
 		infile = 0;
 		hoc_xopen_file_[0] = 0;
 #if defined(USE_PYTHON)
@@ -1051,7 +1071,7 @@ moreinput()
 #endif
 #if MAC
 	if (gargc == 0) {
-		fin = stdin;
+		fin = nrn_fw_set_stdin();
 		infile = 0;
 		hoc_xopen_file_[0] = 0;
 #if defined(USE_PYTHON)
@@ -1061,10 +1081,10 @@ moreinput()
 #endif
 	}
 #endif
-	if (fin && fin != stdin) {
-		IGNORE(fclose(fin));
+	if (fin && !nrn_fw_eq(fin, stdin)) {
+		IGNORE(nrn_fw_fclose(fin));
 	}
-	fin = stdin;
+	fin = nrn_fw_set_stdin();
 	infile = 0;
 	hoc_xopen_file_[0] = 0;
 	if (gargc-- <= 0) {
@@ -1103,7 +1123,7 @@ with the hoc interpreter.
 	}
 #endif
 	if (strcmp(infile, "-") == 0) {
-		fin = stdin;
+		fin = nrn_fw_set_stdin();
 		infile = 0;
 		hoc_xopen_file_[0] = 0;
 	} else if (strcmp(infile, "-parallel") == 0) {
@@ -1123,7 +1143,7 @@ with the hoc interpreter.
 		sprintf(hs->buf, "%s\n", infile);
 		/* now infile is a hoc statement */
 		hpfi = hoc_print_first_instance;
-		fin = (FILE*)0;
+		fin = (NrnFILEWrap*)0;
 		hoc_print_first_instance = 0;
 		err = hoc_oc(hs->buf);
 		hoc_print_first_instance = hpfi;
@@ -1138,11 +1158,14 @@ with the hoc interpreter.
 		}
 		(*p_nrnpy_pyrun)(infile);
 		return moreinput();
-	} else if ((fin=fopen(infile, "r")) == NULL) {
+	} else if ((fin=nrn_fw_fopen(infile, "r")) == (NrnFILEWrap*)0) {
 #if OCSMALL
 hoc_menu_cleanup();
 #endif
-		Fprintf(stderr, "%s: can't open %s\n", progname, infile);
+		Fprintf(stderr, "%d %s: can't open %s\n", nrnmpi_myid_world, progname, infile);
+		if (nrnmpi_numprocs_world > 1) {
+			nrnmpi_abort(-1);
+		}
 		return moreinput();
 	}
 	if (infile) {
@@ -1206,7 +1229,7 @@ hoc_run1()	/* execute until EOF */
 		pipeflag=0;
 	}
 #if defined(WIN32) && !defined(CYGWIN)
-	if (fin != stdin) {
+	if (!nrn_fw_eq(fin, stdin)) {
 		hoc_win_wait_cursor();
 	}
 #endif
@@ -1366,7 +1389,7 @@ warning(s, t)	/* print warning message */
 
 int
 Getc(fp)
-	FILE *fp;
+	NrnFILEWrap *fp;
 {
 	/*ARGSUSED*/
 	if (*ctp) {
@@ -1377,7 +1400,7 @@ Getc(fp)
 #if 0
 /* don't allow parser to block. Actually partial statements were never
 allowed anyway */
-	if (!pipeflag && fp == stdin) {
+	if (!pipeflag && nrn_fw_eq(fp,stdin)) {
 		eos = 1;
 		return 0;
 	}
@@ -1391,7 +1414,7 @@ allowed anyway */
 
 unGetc(c, fp)
 	int c;
-	FILE *fp;
+	NrnFILEWrap *fp;
 {
 	/*ARGSUSED*/
 	if (c != EOF && c && ctp != cbuf) {
@@ -1476,9 +1499,9 @@ extern int run_til_stdin(); /* runs the interviews event loop. Returns 1
 extern hoc_notify_value();
 
 #if READLINE
+#if carbon
 extern Pfri rl_event_hook;
 static int event_hook() {
-#if carbon
 	if (!inputReady_) {
 		inputReady_ = (pthread_t*)emalloc(sizeof(pthread_t));
 		pthread_mutex_init(&inputMutex_, 0);
@@ -1492,13 +1515,44 @@ static int event_hook() {
 	pthread_mutex_lock(&inputMutex_);
 	pthread_cond_signal(&inputCond_);
 	return 1;
-#endif
+}
+#else /* not carbon */
+#if defined(MINGW)
+extern Pfri rl_getc_function;
+static int getc_hook() {
+	int i;
+	if (!inputReady_) {
+		stdin_event_ready(); /* store main thread id */
+		inputReady_ = (pthread_t*)emalloc(sizeof(pthread_t));
+		pthread_mutex_init(&inputMutex_, 0);
+		pthread_cond_init(&inputCond_, 0);
+		pthread_create(inputReady_, 0, inputReadyThread, 0);
+	}else{
+		pthread_mutex_unlock(&inputMutex_);
+	}
+//	printf("run til stdin\n");
+	while(!inputReadyFlag_) {
+		run_til_stdin();
+		usleep(10000);
+	}
+	inputReadyFlag_ = 0;
+	i = inputReadyVal_;
+	pthread_mutex_lock(&inputMutex_);
+	pthread_cond_signal(&inputCond_);
+//printf("getc_hook returning %d\n", i);
+	return i;
+}
+#else /* not carbon and not MINGW */
+extern Pfri rl_event_hook;
+static int event_hook() {
 	int i;
 	i = run_til_stdin();
 	return i;
 }
-#endif
-#endif
+#endif /* not carbon and not MINGW */
+#endif /* not carbon */
+#endif /* READLINE */
+#endif /* INTERVIEWS */
 
 #if 1 || MAC
 /*
@@ -1511,32 +1565,29 @@ static int event_hook() {
    for unix and mac this allows files created on any machine to be
    read on any machine
 */
-CHAR* hoc_fgets_unlimited(bufstr, f) HocStr* bufstr; FILE* f; {
+CHAR* hoc_fgets_unlimited(HocStr* bufstr, NrnFILEWrap* f) {
 	return fgets_unlimited_nltrans(bufstr, f, 1);
 }
 
-static CHAR* fgets_unlimited_nltrans(bufstr, f, nltrans)
-    HocStr* bufstr; FILE* f;
-    int nltrans;
-{
+static CHAR* fgets_unlimited_nltrans(HocStr* bufstr, NrnFILEWrap* f, int nltrans) {
 	int c, i;
 	int nl1, nl2;
 	if (nltrans) { nl1 = 26; nl2 = 4;}else{nl1 = nl2 = EOF;}
 	for(i=0;; ++ i) {
-		c = getc(f);
+		c = nrn_fw_getc(f);
 		if (c == EOF || c == nl1 || c == nl2) { /* ^Z and ^D are end of file */
 			/* some editors don't put a newline at last line */
 			if ( i > 0) {
-				ungetc(c, f);
+				nrn_fw_ungetc(c, f);
 				c = '\n';
 			}else{
 				break;
 			}
 		}
 		if (c == '\r') {
-			int c2 = getc(f);
+			int c2 = nrn_fw_getc(f);
 			if (c2 != '\n') {
-				ungetc(c2, f);
+				nrn_fw_ungetc(c2, f);
 			}
 			c = '\n';
 		}
@@ -1570,7 +1621,7 @@ int hoc_get_line(){ /* supports re-entry. fill cbuf with next line */
 			return EOF;
 		}
 	}else{
-		if (fin == stdin && hoc_interviews && !hoc_in_yyparse) {
+		if (nrn_fw_wrap(fin, stdin) && hoc_interviews && !hoc_in_yyparse) {
 		#if MAC
 			for(;;){
 				extern CHAR* hoc_console_buffer;
@@ -1613,15 +1664,26 @@ int hoc_get_line(){ /* supports re-entry. fill cbuf with next line */
 		}
 	}else{
 #if READLINE
-		if (fin == stdin && nrn_istty_) { char *line, *readline(); int n;
+		if (nrn_fw_eq(fin, stdin) && nrn_istty_) { char *line, *readline(); int n;
 #if INTERVIEWS
+#ifdef MINGW
+IFGUI
+			if (hoc_interviews && !hoc_in_yyparse) {
+				rl_getc_function = getc_hook;
+				hoc_notify_value();
+			}else{
+				rl_getc_function = (Pfri)0;
+			}
+ENDGUI
+#else /* not MINGW */
 			if (hoc_interviews && !hoc_in_yyparse) {
 				rl_event_hook = event_hook;
 				hoc_notify_value();
 			}else{
 				rl_event_hook = (Pfri)0;
 			}
-#endif
+#endif /* not MINGW */
+#endif /* INTERVIEWS */
 			if ((line = readline(hoc_promptstr)) == (char *)0) {
 				extern int hoc_notify_stop;
 				return EOF;
@@ -1650,12 +1712,12 @@ int hoc_get_line(){ /* supports re-entry. fill cbuf with next line */
 		}
 #else
 #if INTERVIEWS
-		if (fin == stdin && hoc_interviews && !hoc_in_yyparse) {
+		if (nrn_fw_eq(fin, stdin) && hoc_interviews && !hoc_in_yyparse) {
 			run_til_stdin());
 		}
 #endif
 #if defined(WIN32)
-		if (fin == stdin) {
+		if (nrn_fw_eq(fin, stdin)) {
 			if (gets(cbuf) == (char*)0) {
 /*DebugMessage("gets returned NULL\n");*/
 				return EOF;

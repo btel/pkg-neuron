@@ -55,13 +55,14 @@ os.environ["CXX"]=mpicxx_bin
 #distutils.unixccompiler.UnixCCompiler = MPI_UnixCCompiler
 #################################
 
-include_dirs = [nrn_srcdir+'/src/oc', '../oc']
+include_dirs = [nrn_srcdir+'/src/oc', '../oc', nrn_srcdir+'/src/nrnmpi']
 defines = []
 
 libdirs = ["@NRN_LIBDIR@",
   ivlibdir
 ]
 epre='-Wl,-R'
+
 
 
 hoc_module = Extension(
@@ -71,9 +72,10 @@ hoc_module = Extension(
       @setup_extra_link_args@ = [ epre+libdirs[0],epre+libdirs[1] ],
       #extra_objects = [],
       libraries = [
-	"nrnpython",
+	"nrnpython@npy_apiver@",
         "nrnoc", "oc", "nrniv", "ivoc",
-        "memacs", "meschach", "neuron_gnu", "nrnmpi",
+        "memacs", "meschach", "neuron_gnu",
+	@BUILD_NRNMPI_DYNAMIC_FALSE@"nrnmpi",
         "scopmath", "sparse13", "sundials", "@IVHINES@",
 	"readline"
       ],
@@ -81,12 +83,17 @@ hoc_module = Extension(
       define_macros=defines
     )
 
-
+# specify that the data_files paths are relative to same place as python files
+# from http://stackoverflow.com/questions/1612733/including-non-python-files-with-setup-py
+from distutils.command.install import INSTALL_SCHEMES
+for scheme in INSTALL_SCHEMES.values():
+    scheme['data'] = scheme['purelib']
 
 setup(name="NEURON", version="@PACKAGE_VERSION@",
       description = "NEURON bindings for python",
       package_dir = {'':instdir+'/share/nrn/lib/python'},
-      packages=['neuron','neuron.tests'],
+      packages=['neuron','neuron.neuroml','neuron.tests', 'neuron.rxd', 'neuron.rxd.geometry3d'],
+      data_files = [('neuron', [nrn_srcdir + '/share/lib/python/neuron/help_data.dat'])],
       ext_modules=[hoc_module]
 )
 

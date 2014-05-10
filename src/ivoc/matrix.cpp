@@ -1,11 +1,5 @@
 #include <../../nrnconf.h>
 #include "classreg.h"
-#undef true
-#undef boolean
-#undef false
-#define boolean int
-#define true 1
-#define false 0
 #ifndef nil
 #define nil 0
 #endif
@@ -81,6 +75,18 @@ static double m_ncol(void* v) {
 	return (double)m->ncol();
 }
 
+static double m_setval(void* v) {
+	Matrix* m = (Matrix*)v;
+	int i, j;
+	double val, *pval;
+	i = (int)chkarg(1, 0, m->nrow()-1);
+	j = (int)chkarg(2, 0, m->ncol()-1);
+	val = *getarg(3);
+	pval =m->mep(i, j);
+	*pval = val;
+	return val;
+}
+
 static double m_getval(void* v) {
 	Matrix* m = (Matrix*)v;
 	int i, j;
@@ -133,7 +139,7 @@ static double m_fprint(void* v) {
 	Matrix* m = (Matrix*)v;
 	int i, j, nrow = m->nrow(), ncol = m->ncol();
 	int ia = 1;
-	boolean pr_size = true;
+	bool pr_size = true;
 	const char* f1 = " %-8.3g";
 	const char* f2 = "\n";
 	if (hoc_is_double_arg(ia)) {
@@ -191,7 +197,7 @@ static Object** m_mulv(void* v) {
 	Matrix* m = (Matrix*)v;
 	Vect* vin = vector_arg(1);
 	Vect* vout;
-	boolean f = false;
+	bool f = false;
 	if (ifarg(2)) {
 		vout = vector_arg(2);
 	}else{
@@ -555,8 +561,8 @@ static Object** m_solv(void* v) {
 	check_capac(vin->capacity(), m->ncol());
 #endif
 	Vect* vout = nil;
-	boolean f = false;
-	boolean use_lu = false;
+	bool f = false;
+	bool use_lu = false;
 	// args 2 and 3 are optional [vout, use previous LU factorization]
 	// and in either order
 	for (int i=2; i <=3; ++i) {
@@ -659,6 +665,7 @@ static Member_func m_members[] = {
 	"nrow", m_nrow,
 	"ncol", m_ncol,
 	"getval", m_getval,
+	"setval", m_setval,
 	"sprowlen", m_sprowlen,
 	"spgetrowval", m_spgetrowval,
 	"det", m_det,

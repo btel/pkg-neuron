@@ -6,8 +6,8 @@
 	GUIMath_reg(),
 	PWManager_reg(),
 	GrGlyph_reg(),
-#if HAVE_IV
 	ValueFieldEditor_reg(),
+#if HAVE_IV
 	TextEditor_reg(),
 #endif
 #if !defined(WIN32) || defined(CYGWIN)
@@ -18,6 +18,7 @@
 	StringFunctions_reg(),
 	OcList_reg(),
 	Vector_reg(),
+	OcPtrVector_reg(),
 	OcFile_reg(),
 	OcPointer_reg(),
 #ifdef USEMATRIX
@@ -31,8 +32,8 @@
 	GUIMath_reg,
 	PWManager_reg,
 	GrGlyph_reg,
-#if HAVE_IV
 	ValueFieldEditor_reg,
+#if HAVE_IV
 	TextEditor_reg,
 #endif
 #if !defined(WIN32) || defined(CYGWIN)
@@ -43,6 +44,7 @@
 	StringFunctions_reg,
 	OcList_reg,
 	Vector_reg,
+	OcPtrVector_reg,
 	OcFile_reg,
 	OcPointer_reg,
 #ifdef USEMATRIX

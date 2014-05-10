@@ -9,6 +9,7 @@ extern "C" {
 extern void sec_free(hoc_Item*);
 extern Symlist* hoc_built_in_symlist;
 double* nrnpy_rangepointer(Section*, Symbol*, double, int*);
+extern PyObject* nrn_ptr_richcmp(void* self_ptr, void* other_ptr, int op);
 
 typedef struct {
 	PyObject_HEAD
@@ -98,7 +99,7 @@ static char* pysec_name(Section* sec) {
 		if (ps->name_) {
 			sprintf(cp, "%s", ps->name_);
 		}else{
-			sprintf(cp, "PySec_%lx", (long)ps);
+			sprintf(cp, "PySec_%p", ps);
 		}
 		return buf;
 	}
@@ -121,7 +122,7 @@ static int pysec_cell_equals(Section* sec, Object* obj) {
 }
 
 static void NPySecObj_dealloc(NPySecObj* self) {
-//printf("NPySecObj_dealloc %lx %s\n", (long)self, secname(self->sec_));
+//printf("NPySecObj_dealloc %p %s\n", self, secname(self->sec_));
 	if (self->sec_) {
 		if (self->sec_->prop) {
 			self->sec_->prop->dparam[PROP_PY_INDEX]._pvoid = 0;
@@ -137,19 +138,19 @@ static void NPySecObj_dealloc(NPySecObj* self) {
 }
 
 static void NPySegObj_dealloc(NPySegObj* self) {
-//printf("NPySegObj_dealloc %lx\n", (long)self);
+//printf("NPySegObj_dealloc %p\n", self);
 	Py_XDECREF(self->pysec_);
 	((PyObject*)self)->ob_type->tp_free((PyObject*)self);
 }
 
 static void NPyRangeVar_dealloc(NPyRangeVar* self) {
-//printf("NPyRangeVar_dealloc %lx\n", (long)self);
+//printf("NPyRangeVar_dealloc %p\n", self);
 	Py_XDECREF(self->pyseg_);
 	((PyObject*)self)->ob_type->tp_free((PyObject*)self);
 }
 
 static void NPyMechObj_dealloc(NPyMechObj* self) {
-//printf("NPyMechObj_dealloc %lx %s\n", (long)self, self->ob_type->tp_name);
+//printf("NPyMechObj_dealloc %p %s\n", self, self->ob_type->tp_name);
 	Py_XDECREF(self->pyseg_);
 	((PyObject*)self)->ob_type->tp_free((PyObject*)self);
 }
@@ -164,7 +165,7 @@ static void NPyMechObj_dealloc(NPyMechObj* self) {
 // 
 
 static int NPySecObj_init(NPySecObj* self, PyObject* args, PyObject* kwds) {
-//printf("NPySecObj_init %lx %lx\n", (long)self, (long)self->sec_);
+//printf("NPySecObj_init %p %p\n", self, self->sec_);
 	static const char* kwlist[] = {"cell", "name", NULL};
 	if (self != NULL && !self->sec_) {
 		self->allseg_iter_ = 0;
@@ -192,7 +193,7 @@ static int NPySecObj_init(NPySecObj* self, PyObject* args, PyObject* kwds) {
 PyObject* NPySecObj_new(PyTypeObject* type, PyObject* args, PyObject* kwds) {
 	NPySecObj* self;
 	self = (NPySecObj*)type->tp_alloc(type, 0);
-//printf("NPySecObj_new %lx\n", (long)self);
+//printf("NPySecObj_new %p\n", self);
 	if (self != NULL) {
 		if (NPySecObj_init(self, args, kwds) != 0) {
 			NPySecObj_dealloc(self);
@@ -221,7 +222,7 @@ static PyObject* NPySegObj_new(PyTypeObject* type, PyObject* args, PyObject* kwd
 	}
 	NPySegObj* self;
 	self = (NPySegObj*)type->tp_alloc(type, 0);
-//printf("NPySegObj_new %lx\n", (long)self);
+//printf("NPySegObj_new %p\n", self);
 	if (self != NULL) {
 		self->pysec_ = pysec;
 		self->x_ = x;
@@ -237,7 +238,7 @@ static PyObject* NPyMechObj_new(PyTypeObject* type, PyObject* args, PyObject* kw
 	}
 	NPyMechObj* self;
 	self = (NPyMechObj*)type->tp_alloc(type, 0);
-//printf("NPyMechObj_new %lx %s\n", (long)self, ((PyObject*)self)->ob_type->tp_name);
+//printf("NPyMechObj_new %p %s\n", self, ((PyObject*)self)->ob_type->tp_name);
 	if (self != NULL) {
 		self->pyseg_ = pyseg;
 		Py_INCREF(self->pyseg_);
@@ -257,7 +258,7 @@ static PyObject* NPyRangeVar_new(PyTypeObject* type, PyObject* args, PyObject* k
 }
 
 static int NPySegObj_init(NPySegObj* self, PyObject* args, PyObject* kwds) {
-//printf("NPySegObj_init %lx %lx\n", (long)self, (long)self->pysec_);
+//printf("NPySegObj_init %p %p\n", self, self->pysec_);
 	NPySecObj* pysec;
 	double x;
 	if (!PyArg_ParseTuple(args, "O!d", psection_type, &pysec, &x)) {
@@ -292,7 +293,7 @@ static void o2loc(Object* o, Section** psec, double* px) {
 }
 
 static int NPyMechObj_init(NPyMechObj* self, PyObject* args, PyObject* kwds) {
-//printf("NPyMechObj_init %lx %lx %s\n", (long)self, (long)self->pyseg_, ((PyObject*)self)->ob_type->tp_name);
+//printf("NPyMechObj_init %p %p %s\n", self, self->pyseg_, ((PyObject*)self)->ob_type->tp_name);
 	NPySegObj* pyseg;
 	if (!PyArg_ParseTuple(args, "O!", psegment_type, &pyseg)) {
 		return -1;
@@ -325,6 +326,54 @@ static PyObject* pysec2cell(NPySecObj* self) {
 		Py_INCREF(result);
 	}
 	return result;
+}
+
+static long pysec_hash(PyObject* self) {
+    return castptr2long ((NPySecObj*) self)->sec_;
+}
+
+static long pyseg_hash(PyObject* self) {
+    NPySegObj* seg = (NPySegObj*) self;
+    return castptr2long node_exact(seg->pysec_->sec_, seg->x_);
+}
+
+
+static PyObject* pyseg_richcmp(NPySegObj* self, PyObject* other, int op) {
+	PyObject* pysec;
+	bool result = false;
+	if (PyObject_TypeCheck(other, psegment_type)){
+        NPySegObj* seg = (NPySegObj*) self;
+	    void* self_ptr = (void*) node_exact(seg->pysec_->sec_, seg->x_);
+	    seg = (NPySegObj*) other;
+	    void* other_ptr = (void*) node_exact(seg->pysec_->sec_, seg->x_);
+	    return nrn_ptr_richcmp(self_ptr, other_ptr, op);
+	}
+	Py_RETURN_FALSE;
+}
+
+static PyObject* pysec_richcmp(NPySecObj* self, PyObject* other, int op) {
+	PyObject* pysec;
+	bool result = false;
+	if (PyObject_TypeCheck(other, psection_type)){
+	    void* self_ptr = (void*) (self->sec_);
+	    void* other_ptr = (void*) (((NPySecObj*)other)->sec_);
+	    return nrn_ptr_richcmp(self_ptr, other_ptr, op);
+	}
+	Py_RETURN_FALSE;
+}
+
+
+
+static PyObject* pysec_same(NPySecObj* self, PyObject* args) {
+	PyObject* pysec;
+	if (PyArg_ParseTuple(args, "O", &pysec)) {
+		if (PyObject_TypeCheck(pysec, psection_type)){
+			if (((NPySecObj*)pysec)->sec_ == self->sec_) {
+				Py_RETURN_TRUE;
+			}
+		}
+	}
+	Py_RETURN_FALSE;
 }
 
 static PyObject* NPyMechObj_name(NPyMechObj* self) {
@@ -456,6 +505,12 @@ static PyObject* seg_point_processes(NPySegObj* self) {
 			Py_XDECREF(item);
 		}
 	}
+	return result;
+}
+
+static PyObject* node_index(NPySegObj* self) {
+	Node* nd = node_exact(self->pysec_->sec_, self->x_);
+	PyObject* result = Py_BuildValue("i", nd->v_node_index);
 	return result;
 }
 
@@ -674,9 +729,16 @@ static PyObject* segment_next(NPySegObj* self) {
 			return NULL;
 		}
 	}
+	NPySegObj* seg = PyObject_New(NPySegObj, psegment_type);
+	assert(seg);
+	if (seg == NULL) {
+	}
 	self->x_ = x;
-	Py_INCREF(self);
-	return (PyObject*)self;
+	seg->x_ = x;
+	seg->alliter_ = self->alliter_;
+	seg->pysec_ = self->pysec_;
+	Py_INCREF(seg->pysec_);
+	return (PyObject*)seg;
 }
 
 static PyObject* mech_next(NPyMechObj* self) {
@@ -1018,12 +1080,17 @@ static PyMethodDef NPySecObj_methods[] = {
 	{"cell", (PyCFunction)pysec2cell, METH_NOARGS,
 	 "Return the object that owns the Section. Possibly None."
 	},
+	{"same", (PyCFunction)pysec_same, METH_VARARGS,
+	 "sec1.same(sec2) returns True if sec1 and sec2 wrap the same NEURON Section"
+	},
 	{NULL}
 };
 
 static PyMethodDef NPySegObj_methods[] = {
 	{"point_processes", (PyCFunction)seg_point_processes, METH_NOARGS,
 	  "seg.point_processes() returns list of POINT_PROCESS instances in the segment."},
+	{"node_index", (PyCFunction)node_index, METH_NOARGS,
+	  "seg.node_index() returns index of v, rhs, etc. in the _actual arrays of the appropriate NrnThread."},
 	{NULL}
 };
 
@@ -1184,6 +1251,7 @@ void remake_pmech_types() {
     rangevars_add(hoc_table_lookup("diam", hoc_built_in_symlist));
     rangevars_add(hoc_table_lookup("cm", hoc_built_in_symlist));
     rangevars_add(hoc_table_lookup("v", hoc_built_in_symlist));
+    rangevars_add(hoc_table_lookup("i_cap", hoc_built_in_symlist));
     for (i=4; i < n_memb_func; ++i) { // start at pas
 	nrnpy_reg_mech(i);
     }

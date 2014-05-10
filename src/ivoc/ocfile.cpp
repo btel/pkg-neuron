@@ -26,6 +26,7 @@
 #include "oc2iv.h"
 #include "classreg.h"
 #include "ocfile.h"
+#include "nrnfilewrap.h"
 
 extern char* ivoc_get_temp_file();
 static int ivoc_unlink(const char*);
@@ -123,7 +124,14 @@ static double f_gets(void* v) {
 	OcFile* f = (OcFile*)v;
 	char** pbuf = hoc_pgargstr(1);
 	char* buf;
-	if ((buf = fgets_unlimited(hoc_tmpbuf, f->file())) != 0) {
+#if USE_NRNFILEWRAP
+	NrnFILEWrap nfw, *fw;
+	nfw.f = f->file();
+	fw = &nfw;
+#else
+	FILE* fw = f->file();
+#endif
+	if ((buf = fgets_unlimited(hoc_tmpbuf, fw)) != 0) {
 		hoc_assign_str(pbuf, buf);
 		return double(strlen(buf));
 	}else{
@@ -333,7 +341,7 @@ void OcFile::binary_mode() {
 }
 #endif
 
-boolean OcFile::open(const char* name, const char* type) {
+bool OcFile::open(const char* name, const char* type) {
 	set_name(name);
 #ifdef WIN32
 	binary_ = false;
@@ -364,13 +372,13 @@ FILE* OcFile::file() {
 	return file_;
 }
 
-boolean OcFile::eof() {
+bool OcFile::eof() {
 	int c;
 	c = getc(file());
 	return ungetc(c, file()) == EOF;
 }
 
-boolean OcFile::mktemp() {
+bool OcFile::mktemp() {
 	char* s = ivoc_get_temp_file();
 	if (s) {
 		set_name(s);
@@ -380,7 +388,7 @@ boolean OcFile::mktemp() {
 	return false;
 }
 
-boolean OcFile::unlink() {
+bool OcFile::unlink() {
 	int i = ivoc_unlink(get_name());
 	return i == 0;
 }
@@ -393,7 +401,7 @@ void OcFile::file_chooser_style(const char* type, const char* path, const char* 
 
 	Style* style = new Style(Session::instance()->style());
 	style->ref();
-	boolean nocap = true;
+	bool nocap = true;
 	if (banner) {
 		if (banner[0]) {
 			style->attribute("caption", banner);
@@ -471,9 +479,9 @@ const char* OcFile::dir() {
 	return dirname_.string();
 }
 
-boolean OcFile::file_chooser_popup() {
+bool OcFile::file_chooser_popup() {
 #if HAVE_IV
-	boolean accept = false;
+	bool accept = false;
 	if (!fc_) {
 		hoc_execerror("First call to file_chooser must at least specify r or w", 0);
 	}

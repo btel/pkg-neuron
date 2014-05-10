@@ -37,7 +37,7 @@ TQItem::TQItem() {
 TQItem::~TQItem() {
 }
 
-boolean TQItem::check() {
+bool TQItem::check() {
 #if DOCHECK
 #endif
 	return true;
@@ -48,7 +48,7 @@ static void prnt(const TQItem* b, int level) {
 	for (i=0; i < level; ++i) {
 		printf("    ");
 	}
-	printf("%g %c %d Q=%lx D=%lx\n", b->t_, b->data_?'x':'o', b->cnt_, (long)b, (long)b->data_);
+	printf("%g %c %d Q=%p D=%p\n", b->t_, b->data_?'x':'o', b->cnt_, b, b->data_);
 }
 
 static void chk(TQItem* b, int level) {
@@ -120,6 +120,19 @@ void TQueue::forall_callback(void(*f)(const TQItem*, int)) {
 
 void TQueue::check(const char* mes) {
 }
+
+#if FAST_LEAST
+// for Parallel Global Variable Timestep method.
+// Assume not using bin queue.
+TQItem* TQueue::second_least(double t) {
+	assert(least_);
+	TQItem* b = sphead(sptree_);
+	if (b && b->t_ == t) {
+		return b;
+	}
+	return 0;
+}
+#endif
 
 void TQueue::move_least(double tnew) {
 	MUTLOCK

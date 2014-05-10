@@ -1,5 +1,7 @@
 AC_DEFUN([AC_NRN_WITH_MPI],[
 
+MPICCnrnmpi=$CC
+
 AC_ARG_WITH(mpi,
 AC_HELP_STRING([--with-mpi],[Also compile the parallel code in src/sundials/shared])
 AC_HELP_STRING([--without-mpi],[This is the default. Do not compile the parallel sundials code])
@@ -8,7 +10,6 @@ AC_HELP_STRING([--without-mpi],[This is the default. Do not compile the parallel
 		ACX_MPI([
 			use_mpi=yes
 			NRN_DEFINE(NRNMPI,1,[Define if you want MPI specific features.])
-			NRN_DEFINE_UNQUOTED(DLL_DEFAULT_FNAME,"$host_cpu/.libs/libnrnmech.so",[Define if want a automatic dll load])
 			AC_LANG_PUSH([C++])
 			ACX_MPI([use_mpi=yes])
 			AC_LANG_POP()
@@ -22,11 +23,14 @@ dnl so we commnt out the next two lines. However we still need it
 dnl for nrnivmodl.
 dnl LIBTOOL='$(SHELL) $(top_builddir)/libtool $(LIBTOOLTAG)'
 dnl AC_SUBST(LIBTOOL)
+		    if test "$nrnmpi_dynamic" = "no" ; then
 			CC=$MPICC
 			CXX=$MPICXX
+		    fi
+			MPICCnrnmpi=$MPICC
 			LIBTOOLTAG='--tag=CC'
-			AC_SUBST(CC)
-			AC_SUBST(CXX)
+			dnl AC_SUBST(CC)
+			dnl AC_SUBST(CXX)
 			AC_SUBST(LIBTOOLTAG)
 		],[
 			AC_MSG_ERROR([Cannot compile MPI program])
@@ -44,8 +48,15 @@ AC_DEFUN([AC_NRN_PARANEURON],[
 
 AC_ARG_WITH(paranrn,
 AC_HELP_STRING([--with-paranrn],[parallel variable step integration for individual cells])
+AC_HELP_STRING([--with-paranrn=dynamic],[as above, but with dynamic loading of mpi shared libaries])
 AC_HELP_STRING([--without-paranrn],[default. No parallel integration])
 ,[
+	nrnmpi_dynamic="no"
+	if test "$with_paranrn" = "dynamic" ; then
+		with_paranrn=yes
+		nrnmpi_dynamic="yes"
+		NRN_DEFINE(NRNMPI_DYNAMICLOAD,1,[define to 1 if you want mpi dynamically loaded instead of linked normally])
+	fi
 	if test "$with_paranrn" = "yes" ; then
 		with_mpi=yes
 		use_paranrn=yes
@@ -54,23 +65,39 @@ AC_HELP_STRING([--without-paranrn],[default. No parallel integration])
 		use_paranrn=no
 	fi
 ],[
+	nrnmpi_dynamic="no"
 	use_paranrn=no
 ])
 
 AC_ARG_WITH(multisend,
 AC_HELP_STRING([--with-multisend],[Allow optional MPI_ISend/Recv for spike transfer])
 AC_HELP_STRING([--with-multisend=bgp],[Use BlueGene/P style dma spike transfer])
+AC_HELP_STRING([--with-multisend=all],[Allow ISend or BGP style dma])
+AC_HELP_STRING([--with-multisend=allreplay],[Allow ISend or BGP style dma, and with possiblity of Record/Replay])
 ,[
 	if test "$with_multisend" = "yes" ; then
 		with_mpi=yes
 		use_bgpdma=yes
-		NRN_DEFINE(BGPDMA,1,[Define if you want the framework supporting BlueGene/P style direct dma spike transfer])
+		NRN_DEFINE(BGPDMA,1,
+[Define bits for BGPDMA & 1 (ISend) & 2 (DMA spike transfer) & 4 (DMA Record Replay)])
 	elif test "$with_multisend" = "bgp" ; then
 		with_mpi=yes
 		use_bgpdma=yes
-		NRN_DEFINE(BGPDMA,2,[Define if you want the framework supporting BlueGene/P style direct dma spike transfer])
+		NRN_DEFINE(BGPDMA,2,[Define bits for BGPDMA & 1 (ISend) & 2 (DMA spike transfer) & 4 (DMA Record Replay)])
+	elif test "$with_multisend" = "all" ; then
+		with_mpi=yes
+		use_bgpdma=yes
+		NRN_DEFINE(BGPDMA,3,[Define bits for BGPDMA & 1 (ISend) & 2 (DMA spike transfer) & 4 (DMA Record Replay)])
+	elif test "$with_multisend" = "allreplay" ; then
+		with_mpi=yes
+		use_bgpdma=yes
+		NRN_DEFINE(BGPDMA,7,[Define bits for BGPDMA & 1 (ISend) & 2 (DMA spike transfer) & 4 (DMA Record Replay)])
 	else
 		use_bgpdma=no
+		NRN_DEFINE(BGPDMA,0,[Define bits for BGPDMA & 1 (ISend) & 2 (DMA spike transfer) & 4 (DMA Record Replay)])
+	fi
+	if test "$use_bgpdma" = "yes" ; then
+		NRN_DEFINE(USE_NRNFILEWRAP,1,[Define to allow possibility of rank 0 read file into buffer and broadcast to all ranks.])
 	fi
 ],[
 	use_bgpdma=no
@@ -157,6 +184,7 @@ AC_SUBST(METISINCLUDE)
 AC_SUBST(METISOBJADD)
 AC_SUBST(METISLIBADD)
 AC_SUBST(METISLIB)
+AC_SUBST(MPICCnrnmpi)
 
 ])dnl end of AC_NRN_WITH_METIS
 

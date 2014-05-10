@@ -31,6 +31,12 @@ CONFIGURE_DEPENDENCIES = m4/acx_mpi.m4 m4/ivcheck.m4 m4/java_support.m4 \
 EXTRA_DIST = $(CONFIGURE_DEPENDENCIES) installunix.html build.sh \
 	nrnversion.sh hg2nrnversion_h.sh extend_depcomp.sh
 
+if BUILD_PARANEURON
+	PARANEURON='yes'
+else
+	PARANEURON='no'
+endif
+
 if BUILD_CYGWIN
 #install from the build directories to the mswin destination
 #uses the classical positions of files
@@ -41,6 +47,30 @@ mswin:
 	CC=$(CC) \
 	$(top_srcdir)/src/mswin/batch/instal.sh
 
+endif
+
+if BUILD_MINGW
+#install from the build directories to the mswin destination
+#uses the classical positions of files
+mswin:
+	top_srcdir=$(top_srcdir) marshall_dir=$(marshall_dir) \
+	top_builddir=$(top_builddir) \
+	ivbindir=$(IV_LIBDIR)/../bin \
+	CC=$(CC) \
+	PARANEURON=$(PARANEURON) \
+	host_cpu=$(host_cpu) \
+	$(top_srcdir)/src/mswin/batch/instalmingw.sh
+
+endif
+
+if BUILD_NRNPYTHON
+install-exec-hook:
+	echo "enter install-exec-hook in nrn/Makefile.am"
+	if test "@ac_pysetup@" != "no" ; then \
+		cd src/nrnpython ; \
+		$(PYTHON) setup.py install @ac_pysetup@ ;\
+	fi
+	echo "leave install-exec-hook in nrn/Makefile.am"
 endif
 
 ALPHADIR = hines@www.neuron.yale.edu:/home/htdocs/ftp/neuron/versions/alpha
@@ -81,16 +111,20 @@ alphadist:
 if UniversalMacBinary
 	scp $(HOME)/NEURON-"`sh $(srcdir)/nrnversion.sh`".dmg $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`"-MacOSX"`sw_vers -productVersion`".dmg
 else
-	scp $(HOME)/NEURON-"`sh $(srcdir)/nrnversion.sh`".dmg $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`"-$(host_triplet).dmg
+	scp $(HOME)/NEURON-"`sh $(srcdir)/nrnversion.sh`".dmg $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`"."$(host_cpu)"-apple-osx"`sw_vers -productVersion`".dmg
 endif
 
 else
 if BUILD_CYGWIN
 alphadist:
-	scp src/mswin/nrn"`sh $(srcdir)/nrnversion.sh 3`"setup.exe $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`"-setup.exe
+	scp src/mswin/nrn"`sh $(srcdir)/nrnversion.sh 3`"setup.exe $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`".$(host)-setup.exe
+else
+if BUILD_MINGW
+alphadist:
+	scp src/mswin/nrn"`sh $(srcdir)/nrnversion.sh 3`"setup-$(host_cpu).exe $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`".$(host)-setup.exe
 else
 alphadist:
 	scp nrn-"`sh $(srcdir)/nrnversion.sh`".tar.gz $(ALPHADIR)/nrn-"`sh $(srcdir)/nrnversion.sh 2`".tar.gz
 endif
 endif
-
+endif

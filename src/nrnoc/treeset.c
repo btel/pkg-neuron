@@ -11,9 +11,10 @@
 #include	"membfunc.h"
 #include	"neuron.h"
 #include	"parse.h"
-#include	"nrnmpiuse.h"
+#include	"nrnmpi.h"
 #include	"multisplit.h"
 #include "spmatrix.h"
+#include "nonvintblock.h"
 
 #if CVODE
 extern int cvode_active_;
@@ -26,7 +27,9 @@ extern int	diam_changed;
 extern int	tree_changed;
 extern double	chkarg();
 extern double	nrn_ra();
-extern double   nrnmpi_wtime();
+#if !defined(NRNMPI) || NRNMPI == 0
+extern double nrnmpi_wtime();
+#endif
 extern char* secname();
 extern double nrn_arc_position();
 extern Symlist* hoc_built_in_symlist;
@@ -34,6 +37,8 @@ extern Symbol* hoc_table_lookup();
 extern int* nrn_prop_dparam_size_;
 extern int* nrn_dparam_ptr_start_;
 extern int* nrn_dparam_ptr_end_;
+
+
 
 #if 1 || PARANEURON
 void (*nrn_multisplit_setup_)();
@@ -59,8 +64,9 @@ about a factor of 3 in space and 2 in time even for a tree.
 int nrn_matrix_cnt_ = 0;
 int use_sparse13 = 0;
 int nrn_use_daspk_ = 0;
-extern int linmod_extra_eqn_count();
-extern void linmod_alloc(), linmod_rhs(), linmod_lhs();
+extern int nrndae_extra_eqn_count();
+extern int nrndae_list_is_empty();
+extern void nrndae_alloc(), nrndae_rhs(), nrndae_lhs();
 
 #if VECTORIZE
 /*
@@ -405,7 +411,7 @@ hoc_warning("errno set during calculation of currents", (char*)0);
 	if (use_sparse13) {
 		 /* must be after nrn_rhs_ext so that whatever is put in
 		 nd->_rhs does not get added to nde->rhs */
-		linmod_rhs();
+		nrndae_rhs();
 	}
 
 	activstim_rhs();
@@ -503,7 +509,7 @@ has taken effect
 	if (use_sparse13) {
 		 /* must be after nrn_setup_ext so that whatever is put in
 		 nd->_d does not get added to nde->d */
-		linmod_lhs();
+		nrndae_lhs();
 	}
 
 	activclamp_lhs();
@@ -545,6 +551,8 @@ has taken effect
 void* setup_tree_matrix(NrnThread* _nt){
 	nrn_rhs(_nt);
 	nrn_lhs(_nt);
+	nrn_nonvint_block_current(_nt->end, _nt->_actual_rhs, _nt->id);
+	nrn_nonvint_block_conductance(_nt->end, _nt->_actual_d, _nt->id);
 	return (void*)0;
 }
 
@@ -1651,6 +1659,7 @@ hoc_execerror(memb_func[i].sym->name, "is not thread safe");
 	nrn_update_ps2nt();
 	++structure_change_cnt;
 	long_difus_solve(3, nrn_threads);
+	nrn_nonvint_block_setup();
 	diam_changed = 1;
 }
 
@@ -1815,26 +1824,20 @@ int nrn_modeltype() {
 	NrnThread* nt;
 	static Template* lm = (Template*)0;
 	int type;
-	if (!lm) {
-		Symbol* s = hoc_table_lookup("LinearMechanism", hoc_built_in_symlist);
-		if (s) {
-			lm = s->u.template;
-		}
-	}
 	v_setup_vectors();
+	
+	if (!nrndae_list_is_empty()) {
+		return 2;
+	}
+	
 	type = 0;
 	if (nrn_global_ncell > 0) {
 		type = 1;
-		if ((lm && lm->count > 0)) {
-			type = 2;
-		}
 		FOR_THREADS(nt) if (nt->_ecell_memb_list) {
 			type = 2;
 		}
 	}
-	if (type == 0 && linmod_extra_eqn_count() > 0) {
-		type = 2;
-	}
+	if (type == 0 && nrn_nonvint_block_ode_count(0, 0)) { type = 1; }
 	return type;
 }
 
@@ -1923,7 +1926,7 @@ printf("nrn_matrix_node_alloc use_sparse13=%d cvode_active_=%d nrn_use_daspk_=%d
 	if (use_sparse13) {
 		int in, err, extn, neqn, j;
 		nt = nrn_threads;
-		neqn = nt->end + linmod_extra_eqn_count();
+		neqn = nt->end + nrndae_extra_eqn_count();
 		extn = 0;
 		if (nt->_ecell_memb_list) {
 			extn =  nt->_ecell_memb_list->nodecount * nlayer;
@@ -1975,10 +1978,10 @@ printf("nrn_matrix_node_alloc use_sparse13=%d cvode_active_=%d nrn_use_daspk_=%d
 				nd->_b_matelm = (double*)0;
 			}
 		}
-		linmod_alloc();
+		nrndae_alloc();
 	}else{
 	    FOR_THREADS(nt) {
-		assert(linmod_extra_eqn_count() == 0);
+		assert(nrndae_extra_eqn_count() == 0);
 		assert(!nt->_ecell_memb_list || nt->_ecell_memb_list->nodecount == 0);
 		nt->_actual_d = (double*)ecalloc(nt->end, sizeof(double));
 		nt->_actual_rhs = (double*)ecalloc(nt->end, sizeof(double));

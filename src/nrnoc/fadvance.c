@@ -7,6 +7,8 @@
 #include "section.h"
 #include "membfunc.h"
 #include "multisplit.h"
+#define nrnoc_fadvance_c
+#include "nonvintblock.h"
 
 /*
  after an fadvance from t-dt to t, v is defined at t
@@ -36,7 +38,9 @@
  is present, v for all segments are set to that value.
  */
  
+#if !defined(NRNMPI) || NRNMPI == 0
 extern double nrnmpi_wtime();
+#endif
 extern double* nrn_mech_wtime_;
 extern double t, dt;
 extern double chkarg();
@@ -425,6 +429,8 @@ void* nrn_fixed_step_thread(NrnThread* nth) {
 	return (void*)0;
 }
 
+extern void nrn_extra_scatter_gather(int direction, int tid);
+
 void* nrn_fixed_step_lastpart(NrnThread* nth) {
 	CTBEGIN
 #if NRN_DAQ
@@ -440,6 +446,7 @@ void* nrn_fixed_step_lastpart(NrnThread* nth) {
 #if NRN_DAQ
 	nrn_daq_scanstart();
 #endif
+	nrn_extra_scatter_gather(0, nth->id);
 	nonvint(nth);
 	nrn_ba(nth, AFTER_SOLVE);
 #if NRN_DAQ
@@ -548,7 +555,7 @@ static void update(NrnThread* _nt)
 			NODEV(_nt->_v_node[i]) += NODERHS(_nt->_v_node[i]);
 		}
 		if (use_sparse13) {
-			linmod_update();
+			nrndae_update();
 		}
 	}
     } /* end of non-vectorized update */
@@ -620,6 +627,20 @@ printf("%d %d %g %g %g %g\n", isec, inode, ClassicalNODEB(nd), ClassicalNODEA(nd
 }
 
 fmatrix() {
+	if (ifarg(1)) {
+		extern Node* node_exact(Section*, double);
+		double x = chkarg(1, 0., 1.);
+		int id = (int)chkarg(2, 1., 4.);
+		Node* nd = node_exact(chk_access(), x);
+		NrnThread* _nt = nd->_nt;
+		switch (id) {
+		case 1: ret(NODEA(nd)); break;
+		case 2: ret(NODED(nd)); break;
+		case 3: ret(NODEB(nd)); break;
+		case 4: ret(NODERHS(nd)); break;
+		}
+		return;
+	}
 	nrn_print_matrix(nrn_threads);
 	ret(1.);
 }
@@ -649,6 +670,7 @@ hoc_warning("errno set during calculation of states", (char*)0);
 		}
 	}
 	long_difus_solve(0, _nt); /* if any longitudinal diffusion */
+	nrn_nonvint_block_fixed_step_solve(_nt->id);
 #endif
 }
 
@@ -765,6 +787,7 @@ void nrn_finitialize(int setv, double v) {
 #if MULTICORE
 	for (i=0; i < nrn_nthread; ++i) {
 		NrnThread* nt = nrn_threads + i;
+		nrn_nonvint_block_init(nt->id);
 		NrnThreadMembList* tml;
 		for (tml = nt->tml; tml; tml = tml->next) {
 			Pfri s = memb_func[tml->index].initialize;
@@ -812,7 +835,7 @@ hoc_warning("errno set during call to INITIAL block", (char*)0);
 	}
 #endif
 	if (use_sparse13) {
-		linmod_init();
+		nrndae_init();
 	}
 
 	init_net_events();
@@ -850,6 +873,7 @@ hoc_warning("errno set during call to INITIAL block", (char*)0);
 	nrn_spike_exchange();
 #endif
 	if (nrn_allthread_handle) { (*nrn_allthread_handle)(); }
+	
 	nrn_fihexec(2); /* just before return */
 }
 	
@@ -958,4 +982,17 @@ nrn_ba(NrnThread* nt, int bat){
 			(*f)(ml->nodelist[i], ml->data[i], ml->pdata[i], ml->_thread, nt);
 		}
 	}
+}
+
+int set_nonvint_block(int (*new_nrn_nonvint_block)(int method, int size, double* pd1, double* pd2, int tid)) {
+	nrn_nonvint_block = new_nrn_nonvint_block;
+	return 0;
+}
+
+int nrn_nonvint_block_helper(int method, int size, double* pd1, double* pd2, int tid) {
+	int rval = (*nrn_nonvint_block)(method, size, pd1, pd2, tid);
+	if (rval == -1) {
+		hoc_execerror("nrn_nonvint_block error", 0);
+	}
+	return rval;
 }

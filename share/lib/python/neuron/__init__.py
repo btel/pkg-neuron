@@ -74,6 +74,31 @@ $Id: __init__.py,v 1.1 2008/05/26 11:39:44 hines Exp hines $
 
 """
 
+## With Python launched under Linux, shared libraries are apparently imported
+## using RTLD_LOCAL. For --with-paranrn=dynamic, this caused a failure when
+## libnrnmpi.so is dynamically loaded because nrnmpi_myid (and other global
+## variables in src/nrnmpi/nrnmpi_def_cinc) were not resolved --- even though
+## all those variables are defined in src/oc/nrnmpi_dynam.c and that
+## does a dlopen("libnrnmpi.so", RTLD_NOW | RTLD_GLOBAL) .
+## In this case setting the dlopenflags below fixes the problem. But it
+## seems that DLFCN is often not available.
+## This situation is conceptually puzzling because there
+## never seems to be a problem dynamically loading libnrnmech.so, though it
+## obviously makes use of many names in the rest of NEURON. Anyway,
+## we make the following available in case it is ever needed at least to
+## verify that some import problem is traceable to this issue.
+## The problem can be resolved in two ways. 1) see src/nrnmpi/nrnmpi_dynam.c
+## which promotes liboc.so and libnrniv.so to RTLD_GLOBAL  (commented out).
+## 2) The better way of specifying those libraries to libnrnmpi_la_LIBADD
+## in src/nrnmpi/Makefile.am . This latter also explains why libnrnmech.so
+## does not have this problem.
+#try:
+#  import sys
+#  import DLFCN
+#  sys.setdlopenflags(DLFCN.RTLD_NOW | DLFCN.RTLD_GLOBAL)
+#except:
+#  pass
+
 try:
   import hoc
 except:
@@ -314,4 +339,75 @@ def run(tstop):
     h('while (t < tstop) { fadvance() }')
     # what about pc.psolve(tstop)?
 
+_nrn_dll = None
+def numpy_element_ref(numpy_array, index):
+    """Return a HOC reference into a numpy array.
+    
+    Parameters
+    ----------
+    numpy_array : :class:`numpy.ndarray`
+        the numpy array
+    index : int
+        the index into the numpy array
+    
+    .. warning::
+    
+        No bounds checking.
+    
+    .. warning::
+    
+        Assumes a contiguous array of doubles. In particular, be careful when
+        using slices. If the array is multi-dimensional,
+        the user must figure out the integer index to the desired element.
+    """
+    global _nrn_dll
+    if _nrn_dll is None: _nrn_dll = nrn_dll()
+    import ctypes
+    _nrn_dll.nrn_hocobj_ptr.restype = ctypes.py_object    
+    void_p = ctypes.cast(numpy_array.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), ctypes.c_voidp).value + index * ctypes.sizeof(ctypes.c_double)
+    return _nrn_dll.nrn_hocobj_ptr(ctypes.cast(void_p, ctypes.POINTER(ctypes.c_double)))
 
+def nrn_dll(printpath=False):
+    """Return a ctypes object corresponding to the NEURON library.
+    
+    .. warning::
+    
+        This provides access to the C-language internals of NEURON and should
+        be used with care.
+    """
+    import ctypes
+    import os
+    import platform
+    
+    neuron_home = os.path.split(os.path.split(h.neuronhome())[0])[0]
+
+    success = False
+    base_path = os.path.join(neuron_home, 'lib' , 'python', 'neuron', 'hoc')
+    for extension in ['', '.dll', '.so', '.dylib']:
+        try:
+            the_dll = ctypes.cdll[base_path + extension]
+            if printpath : print base_path + extension
+            success = True
+        except:
+            pass
+        if success: break
+    else:
+        raise Exception('unable to connect to the NEURON library')
+    return the_dll
+
+try:
+  import ctypes
+  import numpy
+  import traceback
+  vec_to_numpy_prototype = ctypes.CFUNCTYPE(ctypes.py_object, ctypes.c_int, ctypes.POINTER(ctypes.c_double))
+  def vec2numpy(size, data):
+    try:
+      return numpy.frombuffer(numpy.core.multiarray.int_asbuffer(ctypes.addressof(data.contents), size*numpy.dtype(float).itemsize))
+    except:
+      traceback.print_exc()
+      return None
+  vec_to_numpy_callback = vec_to_numpy_prototype(vec2numpy)
+  set_vec_as_numpy = nrn_dll().nrnpy_set_vec_as_numpy
+  set_vec_as_numpy(vec_to_numpy_callback)
+except:
+  pass

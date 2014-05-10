@@ -13,6 +13,12 @@ else
 	libdir="${prefix}/${ARCH}/lib"
 fi
 
+if test "${NRNHOME_EXEC}" != "" ; then
+	exec_prefix="${NRNHOME_EXEC}"
+	bindir="${exec_prefix}/bin"
+	libdir="${exec_prefix}/lib"
+fi
+
 export prefix
 export exec_prefix
 export bindir
@@ -32,6 +38,13 @@ TRACE="BGTRACE_LIBS="
 if [ "$1" = "-trace" ] ; then
 	TRACE="BGTRACE_LIBS = -L/bgl/hpct_bgl/mp_profiler/lib -lmpitrace.rts -L/bgl/hpct_bgl/binutils-2.14/lib -lbfd -liberty -lhandle_MPID_Win_start_error.rts"
 	shift
+fi
+
+UserINCFLAGS=""
+if [ "$1" = "-incflags" ] ; then
+      UserINCFLAGS="$2"
+      shift
+      shift
 fi
 
 UserLDFLAGS=""
@@ -138,7 +151,7 @@ if test -n "$cfiles" ; then
 	COBJS=`echo "$cfiles" | sed 's/\.c/.o/g'`
 fi
 
-@NRNMECH_DLL_STYLE_FALSE@make -f "${MAKEFILEDIR}/nrniv_makefile" "$PURIFY" "$TRACE" "MODOBJFILES=$MODOBJS" "COBJFILES=$COBJS" "UserLDFLAGS=$UserLDFLAGS" special &&
+@NRNMECH_DLL_STYLE_FALSE@make -f "${MAKEFILEDIR}/nrniv_makefile" "$PURIFY" "$TRACE" "MODOBJFILES=$MODOBJS" "COBJFILES=$COBJS" "UserLDFLAGS=$UserLDFLAGS" "UserINCFLAGS=$UserINCFLAGS" special &&
 @NRNMECH_DLL_STYLE_FALSE@  echo "Successfully created $ARCH/special"
 
 @NRNMECH_DLL_STYLE_TRUE@MODLO=`echo "$MODOBJS" | sed 's/\.o/.lo/g'`
@@ -146,7 +159,7 @@ fi
 @NRNMECH_DLL_STYLE_TRUE@if test "${mdir}" = "${prefix}/share/nrn/demo/release/powerpc" ; then
 @NRNMECH_DLL_STYLE_TRUE@  mdir='${NRNHOME}'/share/nrn/demo/release/${ARCH}
 @NRNMECH_DLL_STYLE_TRUE@fi
-@NRNMECH_DLL_STYLE_TRUE@make -f "$MAKEFILEDIR/nrnmech_makefile" "MODOBJFILES=$MODLO" "COBJFILES=$CLO" "UserLDFLAGS=$UserLDFLAGS" libnrnmech.la &&
+@NRNMECH_DLL_STYLE_TRUE@make -f "$MAKEFILEDIR/nrnmech_makefile" "MODOBJFILES=$MODLO" "COBJFILES=$CLO" "UserLDFLAGS=$UserLDFLAGS" "UserINCFLAGS=$UserINCFLAGS" libnrnmech.la &&
 @NRNMECH_DLL_STYLE_TRUE@  echo '#!/bin/sh
 @NRNMECH_DLL_STYLE_TRUE@if test "x${NRNHOME}" = "x" ; then
 @NRNMECH_DLL_STYLE_TRUE@	NRNHOME='"\"${prefix}\""'
@@ -163,3 +176,15 @@ fi
 @NRNMECH_DLL_STYLE_TRUE@  chmod 755 special &&
 @NRNMECH_DLL_STYLE_TRUE@  echo "Successfully created $ARCH/special"
 
+@NRNMECH_DLL_STYLE_TRUE@@MAC_DARWIN_TRUE@if false ; then
+@NRNMECH_DLL_STYLE_TRUE@@MAC_DARWIN_FALSE@if false ; then
+@NRNMECH_DLL_STYLE_FALSE@if false ; then
+vv=`sw_vers -productVersion|sed 's/.*\.\(.*\)\..*/\1/'`
+if test $vv -gt 5 ; then
+echo "use @executable_path prefix for install_name for dylib absolute paths"
+ff="${mdir}/.libs/libnrnmech.so"
+f=`otool -L "$ff" | sed -n "s,.*$libdir/\(.*dylib\).*,\
+-change $libdir/\1 @executable_path/../lib/\1,p"`
+install_name_tool $f "$ff"
+fi
+fi

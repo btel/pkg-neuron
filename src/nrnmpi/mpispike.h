@@ -5,11 +5,6 @@
 #define nrn_spikebuf_size 0
 #endif
 
-typedef struct {
-	int gid;
-	double spiketime;
-} NRNMPI_Spike;
-	        
 #if nrn_spikebuf_size > 0
 typedef struct {
 	int nspike;
@@ -21,9 +16,6 @@ typedef struct {
 #if defined(__cplusplus)
 extern "C" {
 #endif
-int nrnmpi_spike_exchange();
-int nrnmpi_spike_exchange_compressed();
-double nrnmpi_mindelay(double m);
 
 #define icapacity_ nrnmpi_i_capacity_
 #define spikeout_ nrnmpi_spikeout_

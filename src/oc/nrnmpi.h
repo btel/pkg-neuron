@@ -14,6 +14,11 @@ extern int nrnmpi_myid; /* rank in subworld */
 extern int nrnmpi_numprocs_bbs; /* number of subworlds */
 extern int nrnmpi_myid_bbs; /* rank in nrn_bbs_comm of rank 0 of a subworld */
 
+typedef struct {
+	int gid;
+	double spiketime;
+} NRNMPI_Spike;
+	        
 #if NRNMPI
 
 #if defined(__cplusplus)
@@ -21,14 +26,12 @@ extern "C" {
 #endif
 
 extern int nrnmpi_use; /* NEURON does MPI init and terminate?*/
-extern void nrnmpi_init(int under_NEURON_control, int* pargc, char*** pargv);
-extern void nrnmpi_terminate();
-extern void nrnmpi_abort(int errcode);
-extern double nrnmpi_wtime();
 
 #if defined(__cplusplus)
 }
 #endif /*c++*/
+
+#include "nrnmpidec.h"
 
 #endif /*NRNMPI*/
 #endif /*nrnmpi_h*/

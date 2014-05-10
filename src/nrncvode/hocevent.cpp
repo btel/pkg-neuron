@@ -93,11 +93,7 @@ hoc_execerror("multiple threads and/or local variable time step method require a
 		}else{
 			t = nt_t = tt;
 		}
-#if carbon
-		stmt_->execute((unsigned int)0);
-#else
 		stmt_->execute(false);
-#endif
 		if (nrn_nthread > 1 || nc->is_local()) {
 			nrn_hoc_unlock();
 		}
@@ -107,19 +103,15 @@ hoc_execerror("multiple threads and/or local variable time step method require a
 
 void HocEvent::allthread_handle() {
 	if (stmt_) {
-#if carbon
-		stmt_->execute((unsigned int)0);
-#else
 		stmt_->execute(false);
-#endif
 	}else{
 		tstopset;
 	}
 	hefree();
 }
 
-void HocEvent::pgvts_deliver(double tt, NetCvode*) {
-	deliver(tt, nil, nil);
+void HocEvent::pgvts_deliver(double tt, NetCvode* nc) {
+	deliver(tt, nc, nrn_threads);
 }
 
 void HocEvent::reclaim() {

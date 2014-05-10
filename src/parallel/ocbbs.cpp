@@ -26,15 +26,17 @@ extern "C" {
 	int BGLCheckpoint();
 #endif
 	extern void nrnmpi_source_var(), nrnmpi_target_var(), nrnmpi_setup_transfer();
-	extern int nrnmpi_spike_compress(int nspike, boolean gid_compress, int xchng_meth);
+	extern int nrnmpi_spike_compress(int nspike, bool gid_compress, int xchng_meth);
 	extern int nrnmpi_splitcell_connect(int that_host);
 	extern int nrnmpi_multisplit(double x, int sid, int backbonestyle);
+	extern int nrn_set_timeout(int timeout);
 	extern void nrnmpi_gid_clear(int);
 	double nrnmpi_rtcomp_time_;
 	extern double nrn_bgp_receive_time(int);
 	char* (*nrnpy_po2pickle)(Object*, size_t*);
 	Object* (*nrnpy_pickle2po)(char*, size_t);
 	char* (*nrnpy_callpicklef)(char*, size_t, int, size_t*);
+	Object* (*nrnpympi_alltoall)(Object*, int);
 #if PARANEURON
 	double nrnmpi_transfer_wait_;
 	double nrnmpi_splitcell_wait_;
@@ -82,7 +84,7 @@ OcBBS::OcBBS(int n) : BBS(n) {
 OcBBS::~OcBBS() {
 }
 
-static boolean posting_ = false;
+static bool posting_ = false;
 static void pack_help(int, OcBBS*);
 static void unpack_help(int, OcBBS*);
 static int submit_help(OcBBS*);
@@ -196,7 +198,7 @@ static double context(void *v) {
 static double working(void* v) {
 	OcBBS* bbs = (OcBBS*)v;
 	int id;
-	boolean b = bbs->working(id, bbs->retval_, bbs->userid_);
+	bool b = bbs->working(id, bbs->retval_, bbs->userid_);
 	if (b) {
 		return double(id);
 	}else{
@@ -384,6 +386,16 @@ Object** BBS::pyret() {
 	return hoc_temp_objptr(po);
 }
 
+static Object** py_alltoall(void*) {
+	assert(nrnpympi_alltoall);
+	int size = 0;
+	if (ifarg(2)) {
+		size = int(chkarg(2, -1, 2.14748e9));
+	}
+	Object* po = (*nrnpympi_alltoall)(*hoc_objgetarg(1), size);
+	return hoc_temp_objptr(po);
+}
+
 static char* key_help() {
 	static char key[50];
 	if (hoc_is_str_arg(1)) {
@@ -470,7 +482,7 @@ static double step_time(void* v) {
 }
 
 static double send_time(void* v) {
-	int arg = ifarg(1) ? int(chkarg(1, 0, 10)) : 0;
+	int arg = ifarg(1) ? int(chkarg(1, 0, 20)) : 0;
 	if (arg) {
 		return nrn_bgp_receive_time(arg);
 	}
@@ -509,7 +521,7 @@ static double threshold(void* v) {
 
 static double spcompress(void* v) {
 	int nspike = -1;
-	boolean gid_compress = true;
+	bool gid_compress = true;
 	int xchng_meth = 0;
 	if (ifarg(1)) {
 		nspike = (int)chkarg(1, -1, MD);
@@ -518,7 +530,7 @@ static double spcompress(void* v) {
 		gid_compress = (chkarg(2, 0, 1) ? true : false);
 	}
 	if (ifarg(3)) {
-		xchng_meth = (int)chkarg(3, 0, 1);
+		xchng_meth = (int)chkarg(3, 0, 15);
 	}
 	return (double)nrnmpi_spike_compress(nspike, gid_compress, xchng_meth);
 }
@@ -547,10 +559,19 @@ static double multisplit(void* v) {
 	return 0.;
 }
 
+static double set_timeout(void* v) {
+	int arg = 0;
+	if (ifarg(1)){
+		arg = int(chkarg(1, 0, 10000));
+	}
+	arg = nrn_set_timeout(arg);
+	return double(arg);
+}
+
 static double gid_clear(void* v) {
 	int arg = 0;
 	if (ifarg(1)){
-		arg = int(chkarg(1, 0, 3));
+		arg = int(chkarg(1, 0, 4));
 	}
 	nrnmpi_gid_clear(arg);
 	return 0.;
@@ -565,7 +586,7 @@ static double outputcell(void* v) {
 
 static double spike_record(void* v) {
 	OcBBS* bbs = (OcBBS*)v;
-	int gid = int(chkarg(1, 0., MD));
+	int gid = int(chkarg(1, -1., MD));
 	IvocVect* spikevec = vector_arg(2);
 	IvocVect* gidvec = vector_arg(3);	
 	bbs->spike_record(gid, spikevec, gidvec);
@@ -860,6 +881,18 @@ static double thread_ctime(void*) {
 	return 0.0;
 }
 
+static double nrn_thread_t(void*) {
+	int i;
+	i = int(chkarg(1, 0, nrn_nthread));
+	return nrn_threads[i]._t;
+}
+
+static double thread_dt(void*) {
+	int i;
+	i = int(chkarg(1, 0, nrn_nthread));
+	return nrn_threads[i]._dt;
+}
+
 static Object** gid2obj(void* v) {
 	OcBBS* bbs = (OcBBS*)v;
 	return bbs->gid2obj(int(chkarg(1, 0, MD)));
@@ -906,6 +939,7 @@ static Member_func members[] = {
 	"integ_time", integ_time,
 	"vtransfer_time", vtransfer_time,
 	"mech_time", mech_time,
+	"timeout", set_timeout,
 
 	"set_gid2node", set_gid2node,
 	"gid_exists", gid_exists,
@@ -940,6 +974,8 @@ static Member_func members[] = {
 	"thread_how_many_proc", thread_how_many_proc,
 	"sec_in_thread", sec_in_thread,
 	"thread_ctime", thread_ctime,
+	"dt", thread_dt,
+	"t", nrn_thread_t,
 
 	0,0
 };
@@ -956,6 +992,7 @@ static Member_ret_obj_func retobj_members[] = {
 	"gid_connect", gid_connect,
 	"upkpyobj", upkpyobj,
 	"pyret", pyret,
+	"py_alltoall", py_alltoall,
 	0,0
 };
 

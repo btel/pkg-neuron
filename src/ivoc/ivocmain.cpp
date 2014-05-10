@@ -117,6 +117,7 @@ static PropertyData properties[] = {
 {"*units_on_flag", "on"},
 {"*NFRAME", "0"}, // see src/oc/code.c for the default value
 {"*NSTACK", "0"}, // see src/oc/code.c for the default value
+{"*Py_NoSiteFlag", "0"}, 
 {"*python", "off"},
 {"*banner", "on"},
 	 { nil }
@@ -136,6 +137,7 @@ static OptionDesc options[] = {
 {"-NFRAME", "*NFRAME", OptionValueNext},
 {"--version", "*print_nrn_version", OptionValueImplicit, "on"},
 {"-python", "*python", OptionValueImplicit, "on"},
+{"-Py_NoSiteFlag", "*Py_NoSiteFlag", OptionValueImplicit, "1"},
 {"-nobanner", "*banner", OptionValueImplicit, "off"},
 #if defined(WIN32)
 {"-mswin_scale", "*mswin_scale", OptionValueNext},
@@ -187,6 +189,7 @@ extern "C" {
 	extern int units_on_flag_;
 	extern double hoc_default_dll_loaded_;
 	extern int hoc_print_first_instance;
+	int nrnpy_nositeflag;
 }
 
 #if !defined(WIN32) && !MAC && !defined(CYGWIN)
@@ -199,7 +202,7 @@ void setneuronhome(const char*) {
 void penv() {
 	int i;
 	for (i=0; environ[i]; ++i) {
-		printf("%lx %s\n", (long)environ[i], environ[i]);
+		printf("%p %s\n", environ[i], environ[i]);
 	}
 }
 #endif
@@ -207,11 +210,11 @@ void penv() {
 #if MAC
 #include <string.h>
 #include <sioux.h>
-extern boolean mac_load_dll(const char*);
+extern bool mac_load_dll(const char*);
 extern "C" {
 void mac_open_doc(const char* s) {
 	// only chdir and load dll on the first opendoc
-	static boolean done = false;
+	static bool done = false;
 	char cs[256];
 	strncpy(cs, s, 256);
 	char* cp  = strrchr(cs, ':');
@@ -240,8 +243,8 @@ void mac_open_app(){
 extern "C" {
 	int ivocmain(int, char**, char**);
 	int (*p_neosim_main)(int, char**, char**);
-	int nrn_global_argc;
-	char** nrn_global_argv;
+	extern int nrn_global_argc;
+	extern char** nrn_global_argv;
 	int always_false;
 	int nrn_is_python_extension;
 }
@@ -257,9 +260,9 @@ static void force_load() {
 #if defined(CYGWIN)
 // see iv/src/OS/directory.cpp
 #include <sys/stat.h>
-static boolean isdir(const char* p) {
+static bool isdir(const char* p) {
 	struct stat st;
-	boolean b =  stat((char*)p, &st) == 0 && S_ISDIR(st.st_mode);
+	bool b =  stat((char*)p, &st) == 0 && S_ISDIR(st.st_mode);
 	//printf("isdir %s returns %d\n", p, b);
 	return b;
 }
@@ -270,11 +273,11 @@ static boolean isdir(const char* p) {
 #endif
 
 // in case we are running without IV then get some important args this way
-static boolean nrn_optarg_on(const char* opt, int* argc, char** argv);
+static bool nrn_optarg_on(const char* opt, int* argc, char** argv);
 static char* nrn_optarg(const char* opt, int* argc, char** argv);
 static int nrn_optargint(const char* opt, int* argc, char** argv, int dflt);
 
-static boolean nrn_optarg_on(const char* opt, int* pargc, char** argv) {
+static bool nrn_optarg_on(const char* opt, int* pargc, char** argv) {
 	char* a;
 	int i;
 	for (i=0; i < *pargc; ++i) {
@@ -365,6 +368,7 @@ int ivocmain (int argc, char** argv, char** env) {
     -nogui           do not send any gui info to screen\n\
     -notatty         buffered stdout and no prompt\n\
     -python          Python is the interpreter\n\
+    -Py_NoSiteFlag   Set Py_NoSiteFlag=1 before initializeing Python\n\
     -realtime        For hard real-time simulation for dynamic clamp\n\
     --version        print version info\n\
     and all InterViews and X11 options\n\
@@ -381,6 +385,9 @@ int ivocmain (int argc, char** argv, char** env) {
 	}
 	if (nrn_optarg_on("-nobanner", &argc, argv)) {
 		nrn_nobanner_ = 1;
+	}
+	if (nrn_optarg_on("-Py_NoSiteFlag", &argc, argv)) {
+		nrnpy_nositeflag = 1;
 	}
 
 	nrnmpi_numprocs = nrn_optargint("-bbs_nhost", &argc, argv, nrnmpi_numprocs);
@@ -685,7 +692,7 @@ ENDGUI
 
 	}
 #endif
-	//printf("p_nrnpython_start = %lx\n", p_nrnpython_start);
+	//printf("p_nrnpython_start = %p\n", p_nrnpython_start);
 	if (p_nrnpython_start) { (*p_nrnpython_start)(1); }
 	if (use_python_interpreter && !p_nrnpython_start) {
 		fprintf(stderr, "Python not available\n");

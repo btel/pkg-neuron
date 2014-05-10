@@ -36,6 +36,7 @@ extern int	hoc_Chdir(), hoc_getcwd(), hoc_Symbol_units(), hoc_stdout();
 extern int	hoc_name_declared(), hoc_unix_mac_pc(), hoc_show_winio();
 extern int	hoc_usemcran4(), hoc_mcran4(), hoc_mcran4init();
 extern int	hoc_nrn_load_dll(), hoc_nrnversion(), hoc_object_pushed();
+extern int	hoc_mallinfo();
 
 #if PVM
 extern int      numprocs(), myproc(), psync();
@@ -209,6 +210,7 @@ static struct { /* Builtin functions with multiple or variable args */
 	"numarg",	hoc_Numarg,
 	"argtype",	hoc_Argtype,
 	"hoc_pointer_",	hoc_pointer,		/* for internal use */
+	"nrn_mallinfo", hoc_mallinfo,
 	"execute",	hoc_exec_cmd,
 	"execute1",	hoc_execute1,
 	"load_proc",	hoc_load_proc,
@@ -282,6 +284,7 @@ double hoc_default_dll_loaded_;
 char* neuron_home;
 char* nrn_mech_dll; /* but actually only for NEURON mswin and linux */
 int use_mcell_ran4_;
+int nrn_xopen_broadcast_;
 
 init()	/* install constants and built-ins table */
 {
@@ -289,6 +292,7 @@ init()	/* install constants and built-ins table */
 	Symbol *s;
 
 	use_mcell_ran4_ = 0;
+	nrn_xopen_broadcast_ = 255;
 	hoc_init_space();
 	for (i = 0; keywords[i].name; i++)
 		IGNORE(install(keywords[i].name, keywords[i].kval, 0.0, &symlist));
@@ -331,6 +335,11 @@ init()	/* install constants and built-ins table */
 	hoc_install_var("hoc_cross_x_", &hoc_cross_x_);
 	hoc_install_var("hoc_cross_y_", &hoc_cross_y_);
 	hoc_install_var("default_dll_loaded_", &hoc_default_dll_loaded_);
+
+	s = install("xopen_broadcast_", UNDEF, 0.0, &hoc_symlist);
+	s->type = VAR;
+	s->subtype = USERINT;
+	s->u.pvalint = &nrn_xopen_broadcast_;
 
 	/* initialize pointers ( why doesn't Vax do this?) */
 	hoc_access = (int *)0;
@@ -377,13 +386,15 @@ hoc_show_winio() {
     hoc_pushx(0.);
 }
 
+int nrn_main_launch;
+
 hoc_nrnversion() {
 	extern char* nrn_version();
 	static char* p;
 	int i;
 	i = 1;
 	if (ifarg(1)) {
-		i = (int)chkarg(1, 0., 10.);
+		i = (int)chkarg(1, 0., 20.);
 	}
 	hoc_ret();
 	p = nrn_version(i);
@@ -391,10 +402,15 @@ hoc_nrnversion() {
 }
 
 hoc_Execerror() {
+	extern hoc_execerror_mes(char*, char*, int);
 	char* c2 = (char*)0;
 	if (ifarg(2)) {
 		c2 = gargstr(2);
 	}
-	hoc_execerror(gargstr(1), c2);
+	if (ifarg(1)) {
+		hoc_execerror(gargstr(1), c2);
+	}else{
+		hoc_execerror_mes(c2, c2, 0);
+	}
 	/* never get here */
 }

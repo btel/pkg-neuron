@@ -1,5 +1,6 @@
 #include <../../nrnconf.h>
 #include <stdio.h>
+#include <string.h>
 #include "../nrncvode/nrnneosm.h"
 #include <nrnmpi.h>
 #include <errno.h>
@@ -7,6 +8,11 @@
 extern "C" {
 	int nrn_isdouble(double*, double, double);
 	int ivocmain(int, char**, char**);
+	extern int nrn_main_launch;
+#if NRNMPI_DYNAMICLOAD
+	extern void nrnmpi_stubs();
+	extern char* nrnmpi_load(int is_python);
+#endif
 #if BLUEGENE_CHECKPOINT
 	void BGLCheckpointInit(char* chkptDirPath);
 	// note: get the path from the environment variable BGL_CHKPT_DIR_PATH
@@ -16,6 +22,7 @@ extern "C" {
 
 int main(int argc, char** argv, char** env) {
 	nrn_isdouble(0,0,0);
+	nrn_main_launch = 1;
 #if 0
 printf("argc=%d\n", argc);
 for (int i=0; i < argc; ++i) {
@@ -23,8 +30,22 @@ printf("argv[%d]=|%s|\n", i, argv[i]);
 }
 #endif
 #if NRNMPI
+#if NRNMPI_DYNAMICLOAD
+	nrnmpi_stubs();
+	for (int i=0; i < argc; ++i) {
+		if (strcmp("-mpi", argv[i]) == 0) {
+			char* pmes;
+			pmes = nrnmpi_load(0);
+			if (pmes) {
+				printf("%s\n", pmes);
+				exit(1);
+			}
+			break;
+		}
+	}
+#endif
 	nrnmpi_init(1, &argc, &argv); // may change argc and argv
-#endif		
+#endif	
 #if BLUEGENE_CHECKPOINT
 	BGLCheckpointInit((char*)0);
 #endif

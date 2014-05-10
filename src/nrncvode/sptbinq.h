@@ -21,7 +21,7 @@ class TQItem {
 public:
 	TQItem();
 	virtual ~TQItem();
-	boolean check();
+	bool check();
 	void clear(){};
 public:
 	void* data_;
@@ -64,6 +64,7 @@ public:
 	
 #if FAST_LEAST
 	TQItem* least() {return least_;}
+	TQItem* second_least(double t);
 #if USE_PTHREAD
 	double least_t(){double tt; MUTLOCK; if (least_) { tt = least_->t_;}else{tt = 1e15;} MUTUNLOCK; return tt;}
 #else

@@ -7,6 +7,7 @@
 #include "utility.h"
 #endif
 
+#include <ocnotify.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "objcmd.h"
@@ -42,12 +43,9 @@ void HocCommand::init(const char* cmd, Object* obj) {
 	s_ = new CopyString(cmd);
 	obj_ = obj;
 	po_ = nil;
-#if HAVE_IV
 	if (obj_) {
-		Oc oc;
-		oc.notify_when_freed((void*)obj_, this);
+		nrn_notify_when_void_freed((void*)obj_, this);
 	}
-#endif
 }
 
 void HocCommand::update(Observable*) { // obj_ has been freed
@@ -57,12 +55,9 @@ void HocCommand::update(Observable*) { // obj_ has been freed
 }
 
 HocCommand::~HocCommand() {
-#if HAVE_IV
 	if (obj_) {
-		Oc oc;
-		oc.notify_pointer_disconnect(this);
+		nrn_notify_pointer_disconnect(this);
 	}
-#endif
 	if (s_) {
 		delete s_;
 	}
@@ -101,14 +96,14 @@ void HocCommand::audit() {
 	}
 	char buf[256];
 	if (obj_) {
-		sprintf(buf, "// execute(\"%s\", %lx)\n", name(), (long)obj_);
+		sprintf(buf, "// execute(\"%s\", %p)\n", name(), obj_);
 	}else{
 		sprintf(buf, "{%s}\n", name());
 	}
 	hoc_audit_command(buf);
 }
 
-int HocCommand::execute(boolean notify) {
+int HocCommand::execute(bool notify) {
 	int err;
 	if (po_) {
 		assert(nrnpy_hoccommand_exec);
@@ -129,7 +124,7 @@ int HocCommand::execute(boolean notify) {
 #endif
 	return err;
 }
-int HocCommand::exec_strret(char* buf, int size, boolean notify) {
+int HocCommand::exec_strret(char* buf, int size, bool notify) {
 	assert (po_)
 	int err = (*nrnpy_hoccommand_exec_strret)(po_, buf, size);
 #if HAVE_IV
@@ -140,7 +135,7 @@ int HocCommand::exec_strret(char* buf, int size, boolean notify) {
 #endif
 	return err;
 }
-int HocCommand::execute(const char* s, boolean notify) {
+int HocCommand::execute(const char* s, bool notify) {
 	assert(po_ == nil);
 	char buf[256];
 	sprintf(buf, "{%s}\n", s);
@@ -189,7 +184,7 @@ HocCommandTool::~HocCommandTool() {
 	delete hc_;
 }
 
-boolean HocCommandTool::event(Event& e) {
+bool HocCommandTool::event(Event& e) {
 	char buf[256];
 	Coord x, y;
 	int kd;

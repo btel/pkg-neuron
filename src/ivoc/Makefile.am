@@ -9,7 +9,7 @@ DEFS = -Dmotif_kit -Dsgi_motif_kit -Dopenlook_kit -Dbw_kit \
 # vanilla interviews is also installed, we don't use it.
 IV_INCLUDES = @IV_INCLUDE@ $(X_CFLAGS)
 nsrc=$(top_srcdir)/src
-INCLUDES = -I$(nsrc)/gnu -I$(nsrc)/mesch -I$(top_builddir)/src/oc -I$(nsrc)/oc $(IV_INCLUDES)
+INCLUDES = -I$(nsrc)/gnu -I$(nsrc)/mesch -I$(top_builddir)/src/oc -I$(nsrc)/oc -I$(nsrc)/nrnmpi $(IV_INCLUDES)
 
 IV_LIBS = @IV_LIBS_LIBTOOL@
 IVOS_DIR = @IVOS_DIR@
@@ -22,10 +22,21 @@ cygwin_sources = ivocwin.cpp
 x_sources = xdep.cpp field.cpp
 carbon_sources = ivocmac.cpp
 
+if BUILD_NRNMPI_DYNAMIC
+nrnmpila =
+else
+nrnmpila = ../nrnmpi/libnrnmpi.la
+endif
+
 if BUILD_CYGWIN
 sysdep_sources = $(cygwin_sources)
 nonsysdep_sources = $(x_sources) $(carbon_sources)
 ivoc_LDFLAGS = -mwindows -e _mainCRTStartup
+else
+if BUILD_MINGW
+sysdep_sources = $(cygwin_sources)
+nonsysdep_sources = $(x_sources) $(carbon_sources)
+ivoc_LDFLAGS =
 else
 if BUILD_CARBON
 sysdep_sources = $(carbon_sources)
@@ -34,6 +45,7 @@ else
 sysdep_sources = $(x_sources)
 nonsysdep_sources = $(cygwin_sources) $(carbon_sources)
 ivoc_LDFLAGS =
+endif
 endif
 endif
 
@@ -47,7 +59,7 @@ libivoc_la_SOURCES = ivoc.cpp xmenu.cpp graph.cpp rubband.cpp grmanip.cpp \
 	graphvec.cpp strfun.cpp ocobserv.cpp fourier.cpp \
 	cbwidget.cpp matrix.cpp ocmatrix.cpp \
 	ocpointer.cpp gifimage.cpp ocnoiv1.cpp grglyph.cpp mlinedit.cpp \
-	$(sysdep_sources) ivocman1.cpp
+	$(sysdep_sources) ivocman1.cpp ocptrvector.cpp
 
 noinst_HEADERS = apwindow.h axis.h bndedval.h cbwidget.h checkpnt.h \
 	classreg.h datapath.h dbrowser.h epsprint.h field.h fourier.h \
@@ -57,16 +69,16 @@ noinst_HEADERS = apwindow.h axis.h bndedval.h cbwidget.h checkpnt.h \
 	ocpicker.h ocpointer.h random1.h rect.h rubband.h scenepic.h \
 	scenevie.h symchoos.h symdir.h utility.h ivocvect.h xmenu.h \
 	nrngsl.h nrngsl_hc_radix2.c nrngsl_real_radix2.c \
-	grglyph.h nrnmutdec.h
+	grglyph.h nrnmutdec.h ocnotify.h ocptrvector.h
 
 ivoc_SOURCES = nrnmain.cpp ivocmain.cpp $(nrniv_iv_sources)
 
 ivoc_LDADD = ../oc/nocable.o ../oc/modlreg.o \
 	../oc/libocxt.la ../oc/liboc.la \
-	libivoc.la ../nrnmpi/libnrnmpi.la \
+	libivoc.la $(nrnmpila) ../oc/liboc.la \
 	@MEMACSLIBLA@ ../mesch/libmeschach.la \
 	../gnu/libneuron_gnu.la $(IVOS_DIR) \
-	$(IV_LIBS) @NRN_READLINE_LIBS@ @NRNJAVA_LIBLA@
+	$(IV_LIBS) @NRN_READLINE_LIBS@ @NRNJAVA_LIBLA@ @PTHREAD_LIBS@
 
 ## We have to play a trick on automake to get it to install the .o files in
 ## an architecture-dependent subdirectory.  (Apparently automake's authors

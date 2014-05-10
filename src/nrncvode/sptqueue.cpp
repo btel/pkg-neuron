@@ -33,7 +33,7 @@ static void deleteitem(TQItem* i) { // only one, semantics changed
 	tpool_->hpfree(i);
 }
 
-boolean TQItem::check() {
+bool TQItem::check() {
 #if DOCHECK
 #endif
 	return true;
@@ -44,7 +44,7 @@ static void prnt(const TQItem* b, int level) {
 	for (i=0; i < level; ++i) {
 		printf("    ");
 	}
-	printf("%g %c %d Q=%lx D=%lx\n", b->t_, b->data_?'x':'o', b->cnt_, (long)b, (long)b->data_);
+	printf("%g %c %d Q=%p D=%p\n", b->t_, b->data_?'x':'o', b->cnt_, b, b->data_);
 }
 
 static void chk(TQItem* b, int level) {
@@ -109,6 +109,17 @@ double TQueue::least_t() {
 TQItem* TQueue::least() {
 	STAT(nleast)
 	return sphead(sptree_);
+}
+#endif
+
+#if FAST_LEAST
+TQItem* TQueue::second_least(double t) {
+	assert(least_);
+	TQItem* b = sphead(sptree_);
+	if (b && b->t_ == t) {
+		return b;
+	}
+	return 0;
 }
 #endif
 

@@ -3,9 +3,15 @@ bin_PROGRAMS = nrnoc
 
 nrnoc_SOURCES = ocmain.c nrnnoiv.c ocnoiv.c cprop.c
 
+if BUILD_NRNMPI_DYNAMIC
+nrnmpila =
+else
+nrnmpila = ../nrnmpi/libnrnmpi.la
+endif
+
 nrnoc_LDADD = ../oc/modlreg.o libnrnoc.la ../oc/liboc.la @MEMACSLIBLA@ \
 	../scopmath/libscopmath.la ../sparse13/libsparse13.la \
-	../nrnmpi/libnrnmpi.la \
+	$(nrnmpila) \
 	@NRN_READLINE_LIBS@ @PTHREAD_LIBS@
 
 ## The shared library that we make from this directory.
@@ -47,7 +53,7 @@ PTHREAD_LIBS=@PTHREAD_LIBS@
 AM_CFLAGS = @MINGW_CFLAG@ $(PTHREAD_CFLAGS)
 AM_CPPFLAGS = -DCABLE=1 -DOOP=1
 nsrc=$(top_srcdir)/src
-INCLUDES = -I$(top_builddir)/src/oc -I$(nsrc)/oc -I$(nsrc)/scopmath -I$(nsrc)/sparse13
+INCLUDES = -I$(top_builddir)/src/oc -I$(nsrc)/oc -I$(nsrc)/scopmath -I$(nsrc)/sparse13 -I$(nsrc)/nrnmpi
 NMODL = ../nmodl/nocmodl
 
 FORCE:
@@ -172,16 +178,19 @@ pattern.c: pattern.mod $(NMODL)
 ## Force make to make hocusr.h even before it's done dependency scanning.
 hocusr.lo: hocusr.h
 
+
 ## This uses a truly antique unix tool to convert a .h file into
 ## the static data necessary for hoc to link to all its functions.
 ## This wouldn't be hard to replace with a perl script....
+if BUILD_MINGW
+else
 hocusr.h: $(nsrc)/nrnoc/neuron.h $(nsrc)/oc/hocinc $(HOC_E_DEP)
 	cat $(nsrc)/nrnoc/neuron.h > tmp.c
 	@CPP@ -I$(nsrc)/nrnoc -I$(nsrc)/oc tmp.c | sed '/^#/d' > neuron.tmp
 	$(HOC_E) - neuron.tmp < $(nsrc)/oc/hocinc
 	cat neuron.tmp temp2hoc > hocusr.h
 	rm -f temp1hoc temp2hoc neuron.tmp tmp.c
-
+endif
 ## Header files that need to be installed:
 pkginclude_HEADERS = neuron.h md1redef.h md2redef.h section.h nrnoc_ml.h \
 	cabvars.h membdef.h membfunc.h \
@@ -189,7 +198,8 @@ pkginclude_HEADERS = neuron.h md1redef.h md2redef.h section.h nrnoc_ml.h \
 
 ## Header files that need to be included in the distribution but not installed:
 noinst_HEADERS = hocusr.h \
-	osxdlfcn.h osxdlfcn.c multicore.c
+	osxdlfcn.h osxdlfcn.c multicore.c \
+	nonvintblock.h
 
 ## We have to play a trick on automake to get it to install the .o files in
 ## an architecture-dependent subdirectory.  (Apparently automake's authors

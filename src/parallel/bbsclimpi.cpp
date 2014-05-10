@@ -1,7 +1,6 @@
 #include <../../nrnconf.h>
 #include "../nrnpython/nrnpython_config.h"
 #include <nrnmpi.h>
-#include "../nrnmpi/bbsmpipack.h"
 #include "bbsconf.h"
 #ifdef NRNMPI	// to end of file
 #include <errno.h>
@@ -33,7 +32,7 @@ extern void (*p_nrnpython_start)(int);
 #endif
 
 struct ltint {
-	boolean operator() (int i, int j) const {
+	bool operator() (int i, int j) const {
 		return i < j;
 	}
 };
@@ -206,24 +205,24 @@ fflush(stdout);
 	return msgtag;
 }
 	
-boolean BBSClient::look_take(const char* key) {
+bool BBSClient::look_take(const char* key) {
 #if debug
 printf("%d BBSClient::look_take %s\n", nrnmpi_myid_bbs, key);
 #endif
 	int type = get(key, LOOK_TAKE);
-	boolean b = (type == LOOK_TAKE_YES);
+	bool b = (type == LOOK_TAKE_YES);
 	if (b) {
 		upkbegin();
 	}
 	return b;
 }
 
-boolean BBSClient::look(const char* key) {
+bool BBSClient::look(const char* key) {
 #if debug
 printf("%d BBSClient::look %s\n", nrnmpi_myid_bbs, key);
 #endif
 	int type = get(key, LOOK);
-	boolean b = (type == LOOK_YES);
+	bool b = (type == LOOK_YES);
 	if (b) {
 		upkbegin();
 	}
