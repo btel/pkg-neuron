@@ -7,7 +7,7 @@ Build-Depends: debhelper (>= 7.0.50~),
                autotools-dev, autoconf, automake, libtool,
                libopenmpi-dev,
                pvm-dev,
-               python-all, cython,
+               python-all, cython, python-dev
                bison, flex
 Standards-Version: 3.9.1
 Homepage: http://www.neuron.yale.edu
