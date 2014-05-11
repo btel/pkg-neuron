@@ -30,11 +30,11 @@ PYVER=$(shell pyversions --default)
 #   --with-music necessary ATM to have CYTHON defined even for
 #                just getting a source distribution out
 override_dh_auto_configure:
-	./build.sh
+	#./build.sh
 	NSRC=$$PWD dh_auto_configure -- \
 	 --without-iv --with-nrnpython=/usr/bin/python \
 	 --exec_prefix=/usr
-	cp debian/source/nrnversion.h src/nrnoc/
+	#cp debian/source/nrnversion.h src/nrnoc/
 
 #override_dh_auto_build:
 #	dh_auto_build
