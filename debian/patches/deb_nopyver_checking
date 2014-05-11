@@ -1,6 +1,6 @@
 --- a/src/nrnpython/setup.py.in
 +++ b/src/nrnpython/setup.py.in
-@@ -17,7 +17,7 @@
+@@ -17,7 +17,7 @@ instdir = "@prefix@"
  if nrn_srcdir[0] != '/' :
      nrn_srcdir = '../../' + nrn_srcdir
  

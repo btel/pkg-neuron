@@ -6,7 +6,7 @@ Last-Update: 2012-10-15
 
 --- a/src/nrnpython/setup.py.in
 +++ b/src/nrnpython/setup.py.in
-@@ -59,7 +59,8 @@
+@@ -59,7 +59,8 @@ include_dirs = [nrn_srcdir+'/src/oc', '.
  defines = []
  
  libdirs = ["@NRN_LIBDIR@",
@@ -16,12 +16,12 @@ Last-Update: 2012-10-15
  ]
  epre='-Wl,-R'
  
-@@ -91,7 +92,7 @@
+@@ -85,7 +86,7 @@ hoc_module = Extension(
  
  setup(name="NEURON", version="@PACKAGE_VERSION@",
        description = "NEURON bindings for python",
 -      package_dir = {'':instdir+'/share/nrn/lib/python'},
 +      package_dir = {'':nrn_srcdir+'/share/lib/python'},
-       packages=['neuron','neuron.neuroml','neuron.tests', 'neuron.rxd', 'neuron.rxd.geometry3d'],
-       data_files = [('neuron', [nrn_srcdir + '/share/lib/python/neuron/help_data.dat'])],
+       packages=['neuron','neuron.tests'],
        ext_modules=[hoc_module]
+ )

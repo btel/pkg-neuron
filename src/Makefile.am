@@ -87,7 +87,8 @@ SUBDIRS = $(nmodlbuild)
 else
 SUBDIRS = $(readlinebuild) $(memacsbuild) $(nmodlbuild) $(NRNOC_SUBDIRS) \
 	$(nrnjavabuild) $(ivosbuild) $(nrnpythonbuild) \
-	$(build_6229) $(nrnivbuild) $(mos2nrnbuild) $(neuronmusicbuild)
+	$(build_6229) $(nrnivbuild) $(mos2nrnbuild) $(neuronmusicbuild) \
+	mac mswin
 endif
 
 DIST_SUBDIRS = $(MEMACS_SUBDIRS) $(READLINE_SUBDIRS) $(NMODL_SUBDIRS) $(NRNOC_SUBDIRS) \

@@ -4,7 +4,7 @@ exec_prefix=@exec_prefix@
 bindir=@bindir@
 libdir=@libdir@
 LIBOBJDIR=${libdir}
-MAKEFILEDIR=${prefix}/share/nrn
+MAKEFILEDIR=${bindir}
 ARCH=@host_cpu@
 
 if [ ! -d $ARCH ]
